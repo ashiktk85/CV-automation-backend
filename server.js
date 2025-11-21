@@ -1,4 +1,6 @@
 const express = require('express');
+const http = require('http');
+const { Server } = require('socket.io');
 const cors = require('cors');
 const multer = require('multer');
 const path = require('path');
@@ -7,6 +9,14 @@ require('dotenv').config();
 const morgan = require('morgan');
 
 const app = express();
+const server = http.createServer(app);
+const io = new Server(server, {
+  cors: {
+    origin: '*',
+    methods: ['GET', 'POST']
+  }
+});
+
 const PORT = process.env.PORT || 3001;
 
 // Logging middleware
@@ -98,6 +108,13 @@ app.post('/api/cv/upload', upload.single('file'), (req, res) => {
     // Store in memory
     cvDataStore.push(cvRecord);
 
+    // Emit socket event to all connected clients
+    io.emit('newCVUploaded', {
+      success: true,
+      data: cvRecord,
+      totalCount: cvDataStore.length
+    });
+
     res.json({
       success: true,
       message: 'CV uploaded successfully',
@@ -140,8 +157,18 @@ app.get('/api/cv/:id', (req, res) => {
   }
 });
 
+// Socket.io connection handling
+io.on('connection', (socket) => {
+  console.log('Client connected:', socket.id);
+
+  socket.on('disconnect', () => {
+    console.log('Client disconnected:', socket.id);
+  });
+});
+
 // Start server
-app.listen(PORT, () => {
+server.listen(PORT, () => {
   console.log(`Server is running on port ${PORT}`);
+  console.log(`Socket.io server is ready`);
 });
 
