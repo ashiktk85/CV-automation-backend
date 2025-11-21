@@ -4,9 +4,13 @@ const multer = require('multer');
 const path = require('path');
 const fs = require('fs');
 require('dotenv').config();
+const morgan = require('morgan');
 
 const app = express();
 const PORT = process.env.PORT || 3001;
+
+// Logging middleware
+app.use(morgan('dev'));
 
 // In-memory storage for CV data (since no DB)
 const cvDataStore = [];
