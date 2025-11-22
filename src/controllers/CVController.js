@@ -11,7 +11,8 @@ class CVController {
   async receiveN8NWebhook(req, res) {
     try {
       const n8nData = req.body;
-      
+
+      console.log(n8nData,'n8nData');
       const result = await this.cvService.createCVFromN8N(n8nData);
       
       res.status(201).json(result);

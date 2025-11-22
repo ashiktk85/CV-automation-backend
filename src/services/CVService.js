@@ -9,10 +9,28 @@ class CVService {
 
   async createCVFromN8N(n8nData) {
     try {
+      console.log('Parsing n8n data:', JSON.stringify(n8nData, null, 2));
+      
       const cvData = this.parseN8NData(n8nData);
+      console.log('Parsed CV data:', cvData);
+      
       this.validateCVData(cvData);
 
-      const fileInfo = await this.processN8NFile(n8nData);
+      let fileInfo;
+      try {
+        fileInfo = await this.processN8NFile(n8nData);
+        console.log('File processed successfully:', fileInfo.fileName);
+      } catch (fileError) {
+        console.warn('File processing failed, continuing without file:', fileError.message);
+        fileInfo = {
+          fileName: 'no-file.pdf',
+          fileExtension: 'pdf',
+          mimeType: 'application/pdf',
+          fileSize: '0 kB',
+          googleDriveFileId: null,
+          googleDriveLink: null
+        };
+      }
 
       const parseTimestamp = (timestampStr) => {
         if (!timestampStr) return new Date();
@@ -64,17 +82,21 @@ class CVService {
       data = n8nData[0];
     }
 
-    if (data.data && typeof data.data === 'object') {
+    if (data && data.data && typeof data.data === 'object' && !Array.isArray(data.data)) {
       data = data.data;
     }
 
+    if (data && data.json && typeof data.json === 'object') {
+      data = data.json;
+    }
+
     return {
-      timestamp: data.timestamp,
-      fullName: data.fullName,
-      email: data.email,
-      jobTitle: data.jobTitle,
-      phoneNumber: data.phoneNumber,
-      file: data.file || data.binary || data.data?.file || data.data?.binary
+      timestamp: data?.timestamp,
+      fullName: data?.fullName,
+      email: data?.email,
+      jobTitle: data?.jobTitle,
+      phoneNumber: data?.phoneNumber,
+      file: data?.file || data?.binary || data?.data?.file || data?.data?.binary
     };
   }
 
