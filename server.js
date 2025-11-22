@@ -1,10 +1,12 @@
+// server.js
 const express = require('express');
 const http = require('http');
 const { Server } = require('socket.io');
 const cors = require('cors');
 const path = require('path');
-require('dotenv').config();
 const morgan = require('morgan');
+const multer = require('multer');          // ⬅️ add multer
+require('dotenv').config();
 
 const Database = require('./src/config/database');
 const CVModel = require('./src/models/CVModel');
@@ -21,16 +23,27 @@ const server = http.createServer(app);
 const io = new Server(server, {
   cors: {
     origin: '*',
-    methods: ['GET', 'POST']
-  }
+    methods: ['GET', 'POST'],
+  },
 });
 
 const PORT = process.env.PORT || 3001;
 
+
 app.use(morgan('dev'));
 app.use(cors());
-app.use(express.json({ limit: '50mb' }));
+
+
+app.use(express.json());
 app.use(express.urlencoded({ extended: true, limit: '50mb' }));
+
+
+const upload = multer({
+  storage: multer.memoryStorage(), 
+  limits: {
+    fileSize: 10 * 1024 * 1024, 
+  },
+});
 
 const uploadsDir = path.join(__dirname, 'uploads');
 app.use('/uploads', express.static(uploadsDir));
@@ -42,7 +55,8 @@ const googleDriveService = new GoogleDriveService();
 const fileUploadService = new FileUploadService(uploadsDir, googleDriveService);
 const cvService = new CVService(cvRepository, io, fileUploadService);
 const cvController = new CVController(cvService, fileUploadService);
-const cvRoutes = new CVRoutes(cvController);
+
+const cvRoutes = new CVRoutes(cvController, upload);
 
 new SocketConfig(io);
 
@@ -51,10 +65,10 @@ cvRoutes.setupRoutes(app);
 async function startServer() {
   try {
     await database.connect();
-    
+
     server.listen(PORT, () => {
       console.log(`Server is running on port ${PORT}`);
-      console.log(`Socket.io server is ready`);
+      console.log('Socket.io server is ready');
     });
   } catch (error) {
     console.error('Failed to start server:', error);
@@ -63,6 +77,7 @@ async function startServer() {
 }
 
 startServer();
+
 
 process.on('SIGINT', async () => {
   await database.disconnect();
