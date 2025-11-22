@@ -2,11 +2,18 @@ const express = require('express');
 const http = require('http');
 const { Server } = require('socket.io');
 const cors = require('cors');
-const multer = require('multer');
 const path = require('path');
-const fs = require('fs');
 require('dotenv').config();
 const morgan = require('morgan');
+
+const Database = require('./src/config/database');
+const CVModel = require('./src/models/CVModel');
+const CVRepository = require('./src/repositories/CVRepository');
+const CVService = require('./src/services/CVService');
+const FileUploadService = require('./src/services/FileUploadService');
+const CVController = require('./src/controllers/CVController');
+const CVRoutes = require('./src/routes/cvRoutes');
+const SocketConfig = require('./src/config/socketConfig');
 
 const app = express();
 const server = http.createServer(app);
@@ -19,156 +26,43 @@ const io = new Server(server, {
 
 const PORT = process.env.PORT || 3001;
 
-// Logging middleware
 app.use(morgan('dev'));
-
-// In-memory storage for CV data (since no DB)
-const cvDataStore = [];
-
-// Create uploads directory if it doesn't exist
-const uploadsDir = path.join(__dirname, 'uploads');
-if (!fs.existsSync(uploadsDir)) {
-  fs.mkdirSync(uploadsDir, { recursive: true });
-}
-
-// Configure multer for file uploads
-const storage = multer.diskStorage({
-  destination: (req, file, cb) => {
-    cb(null, uploadsDir);
-  },
-  filename: (req, file, cb) => {
-    const uniqueSuffix = Date.now() + '-' + Math.round(Math.random() * 1E9);
-    cb(null, file.fieldname + '-' + uniqueSuffix + path.extname(file.originalname));
-  }
-});
-
-const upload = multer({
-  storage: storage,
-  limits: {
-    fileSize: 10 * 1024 * 1024 // 10MB limit
-  },
-  fileFilter: (req, file, cb) => {
-    if (file.mimetype === 'application/pdf') {
-      cb(null, true);
-    } else {
-      cb(new Error('Only PDF files are allowed'), false);
-    }
-  }
-});
-
-// Middleware
 app.use(cors());
-app.use(express.json());
-app.use(express.urlencoded({ extended: true }));
+app.use(express.json({ limit: '50mb' }));
+app.use(express.urlencoded({ extended: true, limit: '50mb' }));
 
-// Serve uploaded files
+const uploadsDir = path.join(__dirname, 'uploads');
 app.use('/uploads', express.static(uploadsDir));
 
-// Routes
-app.get('/api/health', (req, res) => {
-  res.json({ status: 'ok', message: 'Server is running' });
-});
+const database = new Database();
+const cvModel = CVModel;
+const cvRepository = new CVRepository(cvModel);
+const fileUploadService = new FileUploadService(uploadsDir);
+const cvService = new CVService(cvRepository, io, fileUploadService);
+const cvController = new CVController(cvService, fileUploadService);
+const cvRoutes = new CVRoutes(cvController);
 
-// Endpoint to receive CV data and file
-app.post('/api/cv/upload', upload.single('file'), (req, res) => {
+new SocketConfig(io);
+
+cvRoutes.setupRoutes(app);
+
+async function startServer() {
   try {
-    if (!req.file) {
-      return res.status(400).json({ error: 'No file uploaded' });
-    }
-
-    // Get JSON data from request body
-    const { timestamp, fullName, email, jobTitle } = req.body;
-
-    if (!fullName || !email || !jobTitle) {
-      // Delete uploaded file if data is invalid
-      fs.unlinkSync(req.file.path);
-      return res.status(400).json({ error: 'Missing required fields: fullName, email, jobTitle' });
-    }
-
-    // Process file information
-    const fileInfo = {
-      fileName: req.file.originalname,
-      fileExtension: path.extname(req.file.originalname).substring(1),
-      mimeType: req.file.mimetype,
-      fileSize: (req.file.size / 1024).toFixed(2) + ' kB',
-      filePath: `/uploads/${req.file.filename}`
-    };
-
-    // Create CV record
-    const cvRecord = {
-      id: Date.now().toString(),
-      timestamp: timestamp || new Date().toISOString(),
-      fullName,
-      email,
-      jobTitle,
-      file: fileInfo,
-      createdAt: new Date().toISOString()
-    };
-
-    // Store in memory
-    cvDataStore.push(cvRecord);
-
-    // Emit socket event to all connected clients
-    io.emit('newCVUploaded', {
-      success: true,
-      data: cvRecord,
-      totalCount: cvDataStore.length
-    });
-
-    res.json({
-      success: true,
-      message: 'CV uploaded successfully',
-      data: cvRecord
+    await database.connect();
+    
+    server.listen(PORT, () => {
+      console.log(`Server is running on port ${PORT}`);
+      console.log(`Socket.io server is ready`);
     });
   } catch (error) {
-    console.error('Error processing CV upload:', error);
-    if (req.file && fs.existsSync(req.file.path)) {
-      fs.unlinkSync(req.file.path);
-    }
-    res.status(500).json({ error: 'Failed to process CV upload', details: error.message });
+    console.error('Failed to start server:', error);
+    process.exit(1);
   }
+}
+
+startServer();
+
+process.on('SIGINT', async () => {
+  await database.disconnect();
+  process.exit(0);
 });
-
-// Endpoint to get all CV data
-app.get('/api/cv/list', (req, res) => {
-  try {
-    res.json({
-      success: true,
-      count: cvDataStore.length,
-      data: cvDataStore
-    });
-  } catch (error) {
-    console.error('Error fetching CV list:', error);
-    res.status(500).json({ error: 'Failed to fetch CV list', details: error.message });
-  }
-});
-
-// Endpoint to get single CV by ID
-app.get('/api/cv/:id', (req, res) => {
-  try {
-    const cv = cvDataStore.find(item => item.id === req.params.id);
-    if (!cv) {
-      return res.status(404).json({ error: 'CV not found' });
-    }
-    res.json({ success: true, data: cv });
-  } catch (error) {
-    console.error('Error fetching CV:', error);
-    res.status(500).json({ error: 'Failed to fetch CV', details: error.message });
-  }
-});
-
-// Socket.io connection handling
-io.on('connection', (socket) => {
-  console.log('Client connected:', socket.id);
-
-  socket.on('disconnect', () => {
-    console.log('Client disconnected:', socket.id);
-  });
-});
-
-// Start server
-server.listen(PORT, () => {
-  console.log(`Server is running on port ${PORT}`);
-  console.log(`Socket.io server is ready`);
-});
-
