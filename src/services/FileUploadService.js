@@ -3,8 +3,9 @@ const path = require('path');
 const fs = require('fs');
 
 class FileUploadService {
-  constructor(uploadsDir) {
+  constructor(uploadsDir, googleDriveService) {
     this.uploadsDir = uploadsDir;
+    this.googleDriveService = googleDriveService;
     this.initializeDirectory();
     this.upload = this.configureMulter();
   }
@@ -58,6 +59,30 @@ class FileUploadService {
   deleteFile(filePath) {
     if (fs.existsSync(filePath)) {
       fs.unlinkSync(filePath);
+    }
+  }
+
+  async uploadToGoogleDrive(binaryData, fileName, mimeType) {
+    try {
+      let buffer;
+      
+      if (typeof binaryData === 'string') {
+        if (binaryData.startsWith('data:')) {
+          const base64Data = binaryData.split(',')[1] || binaryData;
+          buffer = Buffer.from(base64Data, 'base64');
+        } else {
+          buffer = Buffer.from(binaryData, 'base64');
+        }
+      } else if (Buffer.isBuffer(binaryData)) {
+        buffer = binaryData;
+      } else {
+        throw new Error('Invalid binary data format');
+      }
+
+      const result = await this.googleDriveService.uploadFile(buffer, fileName, mimeType);
+      return result;
+    } catch (error) {
+      throw new Error(`Failed to upload file to Google Drive: ${error.message}`);
     }
   }
 

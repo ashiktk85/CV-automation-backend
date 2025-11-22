@@ -14,8 +14,24 @@ class CVService {
 
       const fileInfo = await this.processN8NFile(n8nData);
 
+      const parseTimestamp = (timestampStr) => {
+        if (!timestampStr) return new Date();
+        
+        if (typeof timestampStr === 'string') {
+          const parts = timestampStr.split(' ');
+          if (parts.length === 2) {
+            const [datePart, timePart] = parts;
+            const [day, month, year] = datePart.split('/');
+            const [hour, minute, second] = timePart.split(':');
+            return new Date(year, month - 1, day, hour, minute, second);
+          }
+        }
+        
+        return new Date(timestampStr) || new Date();
+      };
+
       const cvRecord = {
-        timestamp: cvData.timestamp || new Date().toISOString(),
+        timestamp: parseTimestamp(cvData.timestamp),
         fullName: cvData.fullName,
         email: cvData.email,
         jobTitle: cvData.jobTitle,
@@ -42,23 +58,44 @@ class CVService {
   }
 
   parseN8NData(n8nData) {
+    let data = n8nData;
+
+    if (Array.isArray(n8nData) && n8nData.length > 0) {
+      data = n8nData[0];
+    }
+
+    if (data.data && typeof data.data === 'object') {
+      data = data.data;
+    }
+
     return {
-      timestamp: n8nData.timestamp || n8nData.data?.timestamp,
-      fullName: n8nData.fullName || n8nData.data?.fullName,
-      email: n8nData.email || n8nData.data?.email,
-      jobTitle: n8nData.jobTitle || n8nData.data?.jobTitle,
-      file: n8nData.file || n8nData.data?.file
+      timestamp: data.timestamp,
+      fullName: data.fullName,
+      email: data.email,
+      jobTitle: data.jobTitle,
+      phoneNumber: data.phoneNumber,
+      file: data.file || data.binary || data.data?.file || data.data?.binary
     };
   }
 
   async processN8NFile(n8nData) {
-    const fileData = n8nData.file || n8nData.data?.file || n8nData.binary || n8nData.data?.binary;
+    let data = n8nData;
+    
+    if (Array.isArray(n8nData) && n8nData.length > 0) {
+      data = n8nData[0];
+    }
+
+    if (data.data && typeof data.data === 'object') {
+      data = data.data;
+    }
+
+    const fileData = data.file || data.binary || data.data?.file || data.data?.binary;
     
     if (!fileData) {
       throw new Error('No file data provided in n8n payload');
     }
 
-    const fileName = fileData.fileName || fileData['File Name'] || 'cv.pdf';
+    const fileName = fileData.fileName || fileData['File Name'] || `cv-${Date.now()}.pdf`;
     const fileExtension = fileData.fileExtension || fileData['File Extension'] || 'pdf';
     const mimeType = fileData.mimeType || fileData['Mime Type'] || 'application/pdf';
     const fileSize = fileData.fileSize || fileData['File Size'] || '0 kB';
@@ -68,10 +105,10 @@ class CVService {
       throw new Error('No binary data provided in n8n payload');
     }
 
-    const savedFilePath = await this.fileUploadService.saveN8NFile(
+    const googleDriveResult = await this.fileUploadService.uploadToGoogleDrive(
       binaryData,
       fileName,
-      fileExtension
+      mimeType
     );
 
     return {
@@ -79,7 +116,8 @@ class CVService {
       fileExtension: fileExtension,
       mimeType: mimeType,
       fileSize: fileSize,
-      filePath: savedFilePath
+      googleDriveFileId: googleDriveResult.fileId,
+      googleDriveLink: googleDriveResult.directLink
     };
   }
 

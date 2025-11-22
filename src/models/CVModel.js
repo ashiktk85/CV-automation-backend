@@ -5,15 +5,17 @@ const fileSchema = new mongoose.Schema({
   fileExtension: { type: String, required: true },
   mimeType: { type: String, required: true },
   fileSize: { type: String, required: true },
-  filePath: { type: String, required: true }
+  googleDriveFileId: { type: String, required: true },
+  googleDriveLink: { type: String, required: true }
 }, { _id: false });
 
 const cvSchema = new mongoose.Schema({
-  timestamp: { type: String, required: true },
+  timestamp: { type: Date, required: true },
   fullName: { type: String, required: true },
   email: { type: String, required: true },
   jobTitle: { type: String, required: true },
   file: { type: fileSchema, required: true },
+  starred: { type: Boolean, default: false },
   createdAt: { type: Date, default: Date.now }
 }, {
   timestamps: true
