@@ -107,14 +107,18 @@ class CVService {
       data = n8nData[0];
     }
 
-    if (data.data && typeof data.data === 'object') {
+    if (data && data.data && typeof data.data === 'object' && !Array.isArray(data.data)) {
       data = data.data;
     }
 
-    const fileData = data.file || data.binary || data.data?.file || data.data?.binary;
+    if (data && data.json && typeof data.json === 'object') {
+      data = data.json;
+    }
+
+    const fileData = data?.file || data?.binary || data?.data?.file || data?.data?.binary || data?.binary?.data;
     
     if (!fileData) {
-      throw new Error('No file data provided in n8n payload');
+      throw new Error('No file data provided in n8n payload. Expected file, binary, or data.file in the payload.');
     }
 
     const fileName = fileData.fileName || fileData['File Name'] || `cv-${Date.now()}.pdf`;

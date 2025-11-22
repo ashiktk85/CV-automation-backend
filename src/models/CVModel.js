@@ -5,8 +5,8 @@ const fileSchema = new mongoose.Schema({
   fileExtension: { type: String, required: true },
   mimeType: { type: String, required: true },
   fileSize: { type: String, required: true },
-  googleDriveFileId: { type: String, required: true },
-  googleDriveLink: { type: String, required: true }
+  googleDriveFileId: { type: String, required: false },
+  googleDriveLink: { type: String, required: false }
 }, { _id: false });
 
 const cvSchema = new mongoose.Schema({

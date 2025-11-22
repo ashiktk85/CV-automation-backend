@@ -10,6 +10,11 @@ class GoogleDriveService {
 
   initializeDrive() {
     try {
+      if (!process.env.GOOGLE_DRIVE_CLIENT_EMAIL || !process.env.GOOGLE_DRIVE_PRIVATE_KEY) {
+        console.warn('Google Drive credentials not configured. File uploads will fail.');
+        return;
+      }
+
       const auth = new google.auth.GoogleAuth({
         credentials: {
           client_email: process.env.GOOGLE_DRIVE_CLIENT_EMAIL,
@@ -20,6 +25,7 @@ class GoogleDriveService {
       });
 
       this.drive = google.drive({ version: 'v3', auth });
+      console.log('Google Drive initialized successfully');
     } catch (error) {
       console.error('Failed to initialize Google Drive:', error);
       throw error;
@@ -28,6 +34,10 @@ class GoogleDriveService {
 
   async uploadFile(buffer, fileName, mimeType = 'application/pdf') {
     try {
+      if (!this.drive) {
+        throw new Error('Google Drive not initialized. Please check your credentials.');
+      }
+
       const fileMetadata = {
         name: fileName,
         parents: this.folderId ? [this.folderId] : []
@@ -38,11 +48,14 @@ class GoogleDriveService {
         body: buffer
       };
 
+      console.log(`Uploading file to Google Drive: ${fileName}`);
       const response = await this.drive.files.create({
         requestBody: fileMetadata,
         media: media,
         fields: 'id, name, webViewLink, webContentLink'
       });
+
+      console.log(`File uploaded successfully. File ID: ${response.data.id}`);
 
       await this.drive.permissions.create({
         fileId: response.data.id,
@@ -61,6 +74,7 @@ class GoogleDriveService {
       };
     } catch (error) {
       console.error('Error uploading to Google Drive:', error);
+      console.error('Error details:', error.response?.data || error.message);
       throw new Error(`Failed to upload file to Google Drive: ${error.message}`);
     }
   }
