@@ -1,3 +1,5 @@
+const path = require('path');
+
 class CVService {
   constructor(cvRepository, socketIO, fileUploadService) {
     this.cvRepository = cvRepository;
@@ -48,13 +50,19 @@ class CVService {
         return new Date(timestampStr) || new Date();
       };
 
-      const cvRecord = {
+            const cvRecord = {
         timestamp: parseTimestamp(cvData.timestamp),
         fullName: cvData.fullName,
         email: cvData.email,
         jobTitle: cvData.jobTitle,
         file: fileInfo
       };
+
+      console.log('Creating CV record with file info:', {
+        fileName: fileInfo.fileName,
+        localFilePath: fileInfo.localFilePath,
+        googleDriveLink: fileInfo.googleDriveLink
+      });
 
       const createdCV = await this.cvRepository.create(cvRecord);
       const count = await this.cvRepository.count();
@@ -101,49 +109,100 @@ class CVService {
   }
 
   async processN8NFile(n8nData) {
-    let data = n8nData;
-    
-    if (Array.isArray(n8nData) && n8nData.length > 0) {
-      data = n8nData[0];
+    let buffer;
+    let fileName;
+    let fileExtension;
+    let mimeType;
+    let fileSize;
+
+    // First, check if file came from multer (req.file)
+    if (n8nData.file && n8nData.file.buffer) {
+      console.log('Processing file from multer (req.file)');
+      buffer = n8nData.file.buffer;
+      fileName = n8nData.file.originalname || `cv-${Date.now()}.pdf`;
+      fileExtension = path.extname(fileName).substring(1) || 'pdf';
+      mimeType = n8nData.file.mimetype || 'application/pdf';
+      fileSize = (n8nData.file.size / 1024).toFixed(2) + ' kB';
+    } else {
+      // Fall back to parsing n8n data structure
+      console.log('Processing file from n8n data structure');
+      let data = n8nData;
+      
+      if (Array.isArray(n8nData) && n8nData.length > 0) {
+        data = n8nData[0];
+      }
+
+      if (data && data.data && typeof data.data === 'object' && !Array.isArray(data.data)) {
+        data = data.data;
+      }
+
+      if (data && data.json && typeof data.json === 'object') {
+        data = data.json;
+      }
+
+      const fileData = data?.file || data?.binary || data?.data?.file || data?.data?.binary || data?.binary?.data;
+      
+      if (!fileData) {
+        throw new Error('No file data provided in n8n payload. Expected file, binary, or data.file in the payload.');
+      }
+
+      fileName = fileData.fileName || fileData['File Name'] || `cv-${Date.now()}.pdf`;
+      fileExtension = fileData.fileExtension || fileData['File Extension'] || 'pdf';
+      mimeType = fileData.mimeType || fileData['Mime Type'] || 'application/pdf';
+      fileSize = fileData.fileSize || fileData['File Size'] || '0 kB';
+      const binaryData = fileData.data || fileData.binary || fileData.base64;
+
+      if (!binaryData) {
+        throw new Error('No binary data provided in n8n payload');
+      }
+
+      // Convert binary data to buffer
+      if (typeof binaryData === 'string') {
+        if (binaryData.startsWith('data:')) {
+          const base64Data = binaryData.split(',')[1] || binaryData;
+          buffer = Buffer.from(base64Data, 'base64');
+        } else {
+          buffer = Buffer.from(binaryData, 'base64');
+        }
+      } else if (Buffer.isBuffer(binaryData)) {
+        buffer = binaryData;
+      } else {
+        throw new Error('Invalid binary data format');
+      }
     }
 
-    if (data && data.data && typeof data.data === 'object' && !Array.isArray(data.data)) {
-      data = data.data;
+    if (!buffer || buffer.length === 0) {
+      throw new Error('File buffer is empty or invalid');
     }
 
-    if (data && data.json && typeof data.json === 'object') {
-      data = data.json;
+    console.log(`Processing file: ${fileName}, size: ${buffer.length} bytes`);
+
+    // Save file to filtered-cvs folder first
+    const localFileInfo = await this.fileUploadService.saveToFilteredCvs(buffer, fileName);
+    console.log('File saved to filtered-cvs:', localFileInfo.filePath);
+
+    // Optionally upload to Google Drive (you can make this conditional)
+    let googleDriveResult = null;
+    try {
+      googleDriveResult = await this.fileUploadService.uploadToGoogleDrive(
+        buffer,
+        fileName,
+        mimeType
+      );
+      console.log('File uploaded to Google Drive:', googleDriveResult.fileId);
+    } catch (driveError) {
+      console.warn('Google Drive upload failed, continuing with local file only:', driveError.message);
     }
-
-    const fileData = data?.file || data?.binary || data?.data?.file || data?.data?.binary || data?.binary?.data;
-    
-    if (!fileData) {
-      throw new Error('No file data provided in n8n payload. Expected file, binary, or data.file in the payload.');
-    }
-
-    const fileName = fileData.fileName || fileData['File Name'] || `cv-${Date.now()}.pdf`;
-    const fileExtension = fileData.fileExtension || fileData['File Extension'] || 'pdf';
-    const mimeType = fileData.mimeType || fileData['Mime Type'] || 'application/pdf';
-    const fileSize = fileData.fileSize || fileData['File Size'] || '0 kB';
-    const binaryData = fileData.data || fileData.binary || fileData.base64;
-
-    if (!binaryData) {
-      throw new Error('No binary data provided in n8n payload');
-    }
-
-    const googleDriveResult = await this.fileUploadService.uploadToGoogleDrive(
-      binaryData,
-      fileName,
-      mimeType
-    );
 
     return {
       fileName: fileName,
       fileExtension: fileExtension,
       mimeType: mimeType,
       fileSize: fileSize,
-      googleDriveFileId: googleDriveResult.fileId,
-      googleDriveLink: googleDriveResult.directLink
+      localFilePath: localFileInfo.filePath,
+      localFileName: localFileInfo.fileName,
+      googleDriveFileId: googleDriveResult?.fileId || null,
+      googleDriveLink: googleDriveResult?.directLink || null
     };
   }
 
@@ -151,6 +210,18 @@ class CVService {
     const { fullName, email, jobTitle } = cvData;
     if (!fullName || !email || !jobTitle) {
       throw new Error('Missing required fields: fullName, email, jobTitle');
+    }
+  }
+
+  async getAllCVs() {
+    try {
+      const cvs = await this.cvRepository.findAll();
+      return {
+        success: true,
+        data: cvs
+      };
+    } catch (error) {
+      throw new Error(`Failed to get all CVs: ${error.message}`);
     }
   }
 }

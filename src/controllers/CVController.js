@@ -8,11 +8,25 @@ class CVController {
     res.json({ status: 'ok', message: 'Server is running' });
   }
 
+  async getAllCVs(req, res) {
+    try {
+      const result = await this.cvService.getAllCVs();
+      return res.status(200).json(result);
+    } catch (error) {
+      console.error('Error fetching CVs:', error);
+      return res.status(500).json({
+        success: false,
+        error: 'Failed to fetch CVs',
+        details: error.message,
+      });
+    }
+  }
+
   async receiveN8NWebhook(req, res) {
     try {
       console.log('Received n8n webhook request');
       console.log('Content-Type:', req.headers['content-type']);
-      console.log('Request body (raw):', req.body);
+      console.log('Request body keys:', Object.keys(req.body || {}));
       console.log(
         'File info:',
         req.file
@@ -20,12 +34,33 @@ class CVController {
               originalname: req.file.originalname,
               mimetype: req.file.mimetype,
               size: req.file.size,
+              bufferLength: req.file.buffer?.length || 0,
             }
-          : 'no file received'
+          : 'no file received via multer'
       );
   
 
       const raw = Array.isArray(req.body) ? req.body[0] : req.body || {};
+  
+      // Check if file came via multer (multipart/form-data)
+      let fileData = undefined;
+      if (req.file && req.file.buffer && req.file.buffer.length > 0) {
+        console.log('File received via multer, buffer size:', req.file.buffer.length);
+        fileData = {
+          buffer: req.file.buffer,           
+          originalname: req.file.originalname,
+          mimetype: req.file.mimetype,
+          size: req.file.size,
+        };
+      } else {
+        // File might be in request body (JSON with base64)
+        console.log('Checking request body for file data...');
+        const bodyFile = raw.file || raw.binary || raw.data?.file || raw.data?.binary;
+        if (bodyFile) {
+          console.log('File data found in request body');
+          fileData = bodyFile;
+        }
+      }
   
       const n8nData = {
         timestamp: raw.timestamp || raw.timeStamp, 
@@ -33,14 +68,7 @@ class CVController {
         email: raw.email,
         jobTitle: raw.jobTitle,
         phoneNumber: raw.phoneNumber,
-        file: req.file
-          ? {
-              buffer: req.file.buffer,           
-              originalname: req.file.originalname,
-              mimetype: req.file.mimetype,
-              size: req.file.size,
-            }
-          : undefined,
+        file: fileData,
       };
   
 

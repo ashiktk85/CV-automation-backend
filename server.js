@@ -46,13 +46,25 @@ const upload = multer({
 });
 
 const uploadsDir = path.join(__dirname, 'uploads');
+const filteredCvsDir = path.join(__dirname, 'filtered-cvs');
+
+// Ensure directories exist
+const fs = require('fs');
+if (!fs.existsSync(uploadsDir)) {
+  fs.mkdirSync(uploadsDir, { recursive: true });
+}
+if (!fs.existsSync(filteredCvsDir)) {
+  fs.mkdirSync(filteredCvsDir, { recursive: true });
+}
+
 app.use('/uploads', express.static(uploadsDir));
+app.use('/filtered-cvs', express.static(filteredCvsDir));
 
 const database = new Database();
 const cvModel = CVModel;
 const cvRepository = new CVRepository(cvModel);
 const googleDriveService = new GoogleDriveService();
-const fileUploadService = new FileUploadService(uploadsDir, googleDriveService);
+const fileUploadService = new FileUploadService(uploadsDir, filteredCvsDir, googleDriveService);
 const cvService = new CVService(cvRepository, io, fileUploadService);
 const cvController = new CVController(cvService, fileUploadService);
 

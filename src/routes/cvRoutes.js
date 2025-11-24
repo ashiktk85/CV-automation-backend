@@ -5,8 +5,9 @@ class CVRoutes {
   }
 
   setupRoutes(app) {
+      app.get('/api/cv/list', (req, res) => this.cvController.getAllCVs(req, res));
       app.post('/api/cv/n8n-webhook', this.upload.single('file'), (req, res) => this.cvController.receiveN8NWebhook(req, res));
-      app.get('/api/health', (req, res) => console.log('Health check endpoint hit'));
+      app.get('/api/health', (req, res) => this.cvController.getHealthCheck(req, res));
     }
 }
 

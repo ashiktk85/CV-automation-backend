@@ -3,8 +3,9 @@ const path = require('path');
 const fs = require('fs');
 
 class FileUploadService {
-  constructor(uploadsDir, googleDriveService) {
+  constructor(uploadsDir, filteredCvsDir, googleDriveService) {
     this.uploadsDir = uploadsDir;
+    this.filteredCvsDir = filteredCvsDir;
     this.googleDriveService = googleDriveService;
     this.initializeDirectory();
     this.upload = this.configureMulter();
@@ -13,6 +14,9 @@ class FileUploadService {
   initializeDirectory() {
     if (!fs.existsSync(this.uploadsDir)) {
       fs.mkdirSync(this.uploadsDir, { recursive: true });
+    }
+    if (!fs.existsSync(this.filteredCvsDir)) {
+      fs.mkdirSync(this.filteredCvsDir, { recursive: true });
     }
   }
 
@@ -112,6 +116,35 @@ class FileUploadService {
       return `/uploads/${filename}`;
     } catch (error) {
       throw new Error(`Failed to save n8n file: ${error.message}`);
+    }
+  }
+
+  async saveToFilteredCvs(buffer, fileName) {
+    try {
+      if (!Buffer.isBuffer(buffer)) {
+        throw new Error('Invalid buffer provided');
+      }
+
+      // Ensure filtered-cvs directory exists
+      if (!fs.existsSync(this.filteredCvsDir)) {
+        fs.mkdirSync(this.filteredCvsDir, { recursive: true });
+      }
+
+      // Sanitize filename
+      const sanitizedFileName = fileName.replace(/[^a-zA-Z0-9.-]/g, '_');
+      const uniqueSuffix = Date.now() + '-' + Math.round(Math.random() * 1E9);
+      const filename = `${uniqueSuffix}-${sanitizedFileName}`;
+      const filePath = path.join(this.filteredCvsDir, filename);
+
+      fs.writeFileSync(filePath, buffer);
+
+      return {
+        filePath: `/filtered-cvs/${filename}`,
+        localPath: filePath,
+        fileName: filename
+      };
+    } catch (error) {
+      throw new Error(`Failed to save file to filtered-cvs: ${error.message}`);
     }
   }
 }
