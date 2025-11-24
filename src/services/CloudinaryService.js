@@ -1,6 +1,5 @@
 const cloudinary = require('cloudinary').v2;
 const { PDFDocument } = require('pdf-lib');
-const fs = require('fs');
 const path = require('path');
 
 class CloudinaryService {
@@ -62,6 +61,13 @@ class CloudinaryService {
     }
   }
 
+  sanitizeFileName(fileName = '') {
+    return fileName
+      .trim()
+      .replace(/\s+/g, '-')
+      .replace(/[^a-zA-Z0-9-_\.]/g, '_');
+  }
+
   async uploadFile(buffer, fileName, mimeType = 'application/pdf', options = {}) {
     try {
       if (!cloudinary.config().cloud_name) {
@@ -80,12 +86,17 @@ class CloudinaryService {
       const base64String = fileBuffer.toString('base64');
       const dataUri = `data:${mimeType};base64,${base64String}`;
 
+      const parsedName = path.parse(fileName);
+      const sanitizedName = this.sanitizeFileName(parsedName.name);
+      const extension = (parsedName.ext || '.pdf').replace('.', '') || 'pdf';
+      const uniquePublicId = `${sanitizedName || 'cv-file'}-${Date.now()}`;
+
       // Upload to Cloudinary
       const uploadOptions = {
-        resource_type: 'auto', // Automatically detect resource type
+        resource_type: 'raw', // Force raw uploads for PDFs
         folder: process.env.CLOUDINARY_FOLDER || 'cv-automation',
-        public_id: path.parse(fileName).name, // Use filename without extension as public_id
-        format: path.extname(fileName).substring(1) || 'pdf',
+        public_id: uniquePublicId,
+        format: extension,
         overwrite: false,
         ...options
       };
@@ -102,8 +113,6 @@ class CloudinaryService {
         publicUrl: result.url,
         format: result.format,
         bytes: result.bytes,
-        width: result.width,
-        height: result.height,
         resourceType: result.resource_type
       };
     } catch (error) {
