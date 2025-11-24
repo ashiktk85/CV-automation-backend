@@ -61,12 +61,7 @@ class CloudinaryService {
     }
   }
 
-  sanitizeFileName(fileName = '') {
-    return fileName
-      .trim()
-      .replace(/\s+/g, '-')
-      .replace(/[^a-zA-Z0-9-_\.]/g, '_');
-  }
+ 
 
   async uploadFile(buffer, fileName, mimeType = 'application/pdf', options = {}) {
     try {
@@ -87,15 +82,14 @@ class CloudinaryService {
       const dataUri = `data:${mimeType};base64,${base64String}`;
 
       const parsedName = path.parse(fileName);
-      const sanitizedName = this.sanitizeFileName(parsedName.name);
       const extension = (parsedName.ext || '.pdf').replace('.', '') || 'pdf';
-      const uniquePublicId = `${sanitizedName || 'cv-file'}-${Date.now()}`;
+      const publicId = parsedName.name || 'cv-file';
 
       // Upload to Cloudinary
       const uploadOptions = {
         resource_type: 'raw', // Force raw uploads for PDFs
         folder: process.env.CLOUDINARY_FOLDER || 'cv-automation',
-        public_id: uniquePublicId,
+        public_id: publicId,
         format: extension,
         overwrite: false,
         ...options
