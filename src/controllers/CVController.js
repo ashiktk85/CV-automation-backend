@@ -27,17 +27,9 @@ class CVController {
       console.log('Received n8n webhook request');
       console.log('Content-Type:', req.headers['content-type']);
       console.log('Request body keys:', Object.keys(req.body || {}));
-      console.log(
-        'File info:',
-        req.file
-          ? {
-              originalname: req.file.originalname,
-              mimetype: req.file.mimetype,
-              size: req.file.size,
-              bufferLength: req.file.buffer?.length || 0,
-            }
-          : 'no file received via multer'
-      );
+      console.log('File info:', {
+        file: req.file ? req.file.originalname : 'no file received via multer',
+      });
   
 
       const raw = Array.isArray(req.body) ? req.body[0] : req.body || {};

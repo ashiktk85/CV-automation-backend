@@ -45,12 +45,9 @@ class CVService {
           if (cvText && cvText.length > 0) {
             console.log('Evaluating CV for Shopify position...');
             scoring = evaluateShopifyCV(cvText);
-            console.log('CV Scoring result:', {
-              decision: scoring.decision,
-              score: scoring.score,
-              rank: scoring.rank,
-              hasLiquid: scoring.hasLiquid
-            });
+            console.log(`[Shopify Evaluation] Candidate: ${cvData.fullName || 'N/A'} | Decision: ${scoring.decision} | Score: ${scoring.score} | Rank: ${scoring.rank} | Experience matches: ${scoring.shopifyExperienceMatches} | Technical matches: ${scoring.technicalMatches}`);
+          } else {
+            console.warn('PDF text extraction returned empty result, skipping scoring');
           }
         }
 
