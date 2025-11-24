@@ -3,10 +3,10 @@ const path = require('path');
 const fs = require('fs');
 
 class FileUploadService {
-  constructor(uploadsDir, filteredCvsDir, cloudinaryService) {
+  constructor(uploadsDir, filteredCvsDir, supabaseService) {
     this.uploadsDir = uploadsDir;
     this.filteredCvsDir = filteredCvsDir;
-    this.cloudinaryService = cloudinaryService;
+    this.supabaseService = supabaseService;
     this.initializeDirectory();
     this.upload = this.configureMulter();
   }
@@ -66,7 +66,7 @@ class FileUploadService {
     }
   }
 
-  async uploadToCloudinary(binaryData, fileName, mimeType) {
+  async uploadToSupabase(binaryData, fileName, mimeType) {
     try {
       let buffer;
       
@@ -83,11 +83,11 @@ class FileUploadService {
         throw new Error('Invalid binary data format');
       }
 
-      // File will be compressed inside CloudinaryService before uploading
-      const result = await this.cloudinaryService.uploadFile(buffer, fileName, mimeType);
+      // File will be compressed inside SupabaseService before uploading
+      const result = await this.supabaseService.uploadFile(buffer, fileName, mimeType);
       return result;
     } catch (error) {
-      throw new Error(`Failed to upload file to Cloudinary: ${error.message}`);
+      throw new Error(`Failed to upload file to Supabase: ${error.message}`);
     }
   }
 

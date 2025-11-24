@@ -29,9 +29,9 @@ class CVService {
           fileExtension: 'pdf',
           mimeType: 'application/pdf',
           fileSize: '0 kB',
-          cloudinaryPublicId: null,
-          cloudinaryUrl: null,
-          cloudinaryFormat: null
+          supabasePath: null,
+          supabaseUrl: null,
+          supabaseBucket: null
         };
       }
 
@@ -62,7 +62,7 @@ class CVService {
       console.log('Creating CV record with file info:', {
         fileName: fileInfo.fileName,
         localFilePath: fileInfo.localFilePath,
-        cloudinaryUrl: fileInfo.cloudinaryUrl
+        supabaseUrl: fileInfo.supabaseUrl
       });
 
       const createdCV = await this.cvRepository.create(cvRecord);
@@ -182,18 +182,18 @@ class CVService {
     const localFileInfo = await this.fileUploadService.saveToFilteredCvs(buffer, fileName);
     console.log('File saved to filtered-cvs:', localFileInfo.filePath);
 
-    // Upload to Cloudinary (file will be compressed before upload)
-    let cloudinaryResult = null;
+    // Upload to Supabase (file will be compressed before upload)
+    let supabaseResult = null;
     try {
-      cloudinaryResult = await this.fileUploadService.uploadToCloudinary(
+      supabaseResult = await this.fileUploadService.uploadToSupabase(
         buffer,
         fileName,
         mimeType
       );
-      console.log('File uploaded to Cloudinary:', cloudinaryResult.publicId);
-      console.log('Cloudinary URL:', cloudinaryResult.url);
-    } catch (cloudinaryError) {
-      console.warn('Cloudinary upload failed, continuing with local file only:', cloudinaryError.message);
+      console.log('File uploaded to Supabase:', supabaseResult.path);
+      console.log('Supabase URL:', supabaseResult.url);
+    } catch (supabaseError) {
+      console.warn('Supabase upload failed, continuing with local file only:', supabaseError.message);
     }
 
     return {
@@ -203,9 +203,9 @@ class CVService {
       fileSize: fileSize,
       localFilePath: localFileInfo.filePath,
       localFileName: localFileInfo.fileName,
-      cloudinaryPublicId: cloudinaryResult?.publicId || null,
-      cloudinaryUrl: cloudinaryResult?.url || null,
-      cloudinaryFormat: cloudinaryResult?.format || null
+      supabasePath: supabaseResult?.path || null,
+      supabaseUrl: supabaseResult?.url || null,
+      supabaseBucket: supabaseResult?.bucket || null
     };
   }
 

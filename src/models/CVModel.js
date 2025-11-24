@@ -7,9 +7,9 @@ const fileSchema = new mongoose.Schema({
   fileSize: { type: String, required: true },
   localFilePath: { type: String, required: false },
   localFileName: { type: String, required: false },
-  cloudinaryPublicId: { type: String, required: false },
-  cloudinaryUrl: { type: String, required: false },
-  cloudinaryFormat: { type: String, required: false }
+  supabasePath: { type: String, required: false },
+  supabaseUrl: { type: String, required: false },
+  supabaseBucket: { type: String, required: false }
 }, { _id: false });
 
 const cvSchema = new mongoose.Schema({
