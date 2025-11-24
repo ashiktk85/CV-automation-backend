@@ -21,9 +21,8 @@ class CVRepository {
 
   async create(cvRecord) {
     try {
-      // const cv = new this.cvModel(cvRecord);
-      // return await cv.save();
-      return true;
+      const cv = new this.cvModel(cvRecord);
+      return await cv.save();
     } catch (error) {
       throw new Error(`Failed to create CV: ${error.message}`);
     }
