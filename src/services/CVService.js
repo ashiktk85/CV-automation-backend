@@ -26,36 +26,70 @@ class CVService {
       let scoring = null;
 
       try {
-        // Get PDF buffer first
+        // Step 1: Extract PDF buffer - try getPdfBuffer first, then fallback to processN8NFile logic
         pdfBuffer = await this.getPdfBuffer(n8nData);
         
-        if (pdfBuffer && pdfBuffer.length > 0) {
-          // Step 1: Extract text from PDF
-          console.log('Extracting text from PDF...');
+        // If getPdfBuffer failed, try extracting from processN8NFile logic
+        if (!pdfBuffer || pdfBuffer.length === 0) {
+          console.log('getPdfBuffer returned null, trying alternative extraction method...');
+          // Try extracting buffer using the same logic as processN8NFile
+          if (n8nData.file && n8nData.file.buffer && Buffer.isBuffer(n8nData.file.buffer)) {
+            pdfBuffer = n8nData.file.buffer;
+            console.log('Found buffer in n8nData.file.buffer');
+          }
+        }
+        
+        if (!pdfBuffer || pdfBuffer.length === 0) {
+          console.warn('⚠️ No PDF buffer found, cannot extract text or score CV');
+          console.warn('n8nData structure:', {
+            hasFile: !!n8nData.file,
+            fileHasBuffer: !!(n8nData.file && n8nData.file.buffer),
+            fileBufferLength: n8nData.file?.buffer?.length || 0
+          });
+        } else {
+          console.log(`✅ PDF buffer extracted: ${pdfBuffer.length} bytes`);
+          
+          // Step 2: Extract text from PDF
+          console.log('📄 Extracting text from PDF...');
           let cvText = '';
           try {
             cvText = await extractTextFromPdfBuffer(pdfBuffer);
-            console.log(`Extracted ${cvText.length} characters from PDF`);
+            console.log(`✅ Extracted ${cvText.length} characters from PDF`);
+            
+            if (cvText && cvText.length > 50) {
+              // Only log first 200 chars to avoid spam
+              console.log(`📝 PDF text preview: ${cvText.substring(0, 200)}...`);
+            } else if (cvText.length === 0) {
+              console.warn('⚠️ PDF text extraction returned empty string - PDF might be image-based or corrupted');
+            }
           } catch (parseError) {
-            console.warn('PDF parsing failed:', parseError.message);
+            console.error('❌ PDF parsing failed:', parseError.message);
+            console.error('PDF parsing error stack:', parseError.stack);
             // Continue without text extraction
           }
 
-          // Step 2: Score the CV if we have text
+          // Step 3: Score the CV if we have text
           if (cvText && cvText.length > 0) {
-            console.log('Evaluating CV for Shopify position...');
-            scoring = evaluateShopifyCV(cvText);
-            console.log(`[Shopify Evaluation] Candidate: ${cvData.fullName || 'N/A'} | Decision: ${scoring.decision} | Score: ${scoring.score} | Rank: ${scoring.rank} | Experience matches: ${scoring.shopifyExperienceMatches} | Technical matches: ${scoring.technicalMatches}`);
+            console.log('🎯 Evaluating CV for Shopify position...');
+            try {
+              scoring = evaluateShopifyCV(cvText);
+              console.log(`✅ [Shopify Evaluation] Candidate: ${cvData.fullName || 'N/A'} | Decision: ${scoring.decision} | Score: ${scoring.score} | Rank: ${scoring.rank} | Experience matches: ${scoring.shopifyExperienceMatches} | Technical matches: ${scoring.technicalMatches}`);
+            } catch (scoreError) {
+              console.error('❌ CV scoring failed:', scoreError.message);
+              console.error('Scoring error stack:', scoreError.stack);
+            }
           } else {
-            console.warn('PDF text extraction returned empty result, skipping scoring');
+            console.warn('⚠️ PDF text extraction returned empty result, skipping scoring');
           }
         }
 
-        // Step 3: Process file (upload to Supabase, save locally)
-        fileInfo = await this.processN8NFile(n8nData);
-        console.log('File processed successfully:', fileInfo.fileName);
+        // Step 4: Process file (upload to Supabase, save locally)
+        // Pass the already-extracted buffer to avoid re-extraction
+        fileInfo = await this.processN8NFile(n8nData, pdfBuffer);
+        console.log('✅ File processed successfully:', fileInfo.fileName);
       } catch (fileError) {
-        console.warn('File processing failed, continuing without file:', fileError.message);
+        console.error('❌ File processing failed:', fileError.message);
+        console.error('File error stack:', fileError.stack);
         fileInfo = {
           fileName: 'no-file.pdf',
           fileExtension: 'pdf',
@@ -145,54 +179,71 @@ class CVService {
   /**
    * Extracts PDF buffer from n8n data
    * @param {Object} n8nData - n8n webhook data
-   * @returns {Promise<Buffer>} - PDF buffer
+   * @returns {Promise<Buffer>} - PDF buffer or null
    */
   async getPdfBuffer(n8nData) {
-    // Check if file came from multer (req.file)
-    if (n8nData.file && n8nData.file.buffer) {
-      return n8nData.file.buffer;
-    }
-
-    // Fall back to parsing n8n data structure
-    let data = n8nData;
-    
-    if (Array.isArray(n8nData) && n8nData.length > 0) {
-      data = n8nData[0];
-    }
-
-    if (data && data.data && typeof data.data === 'object' && !Array.isArray(data.data)) {
-      data = data.data;
-    }
-
-    if (data && data.json && typeof data.json === 'object') {
-      data = data.json;
-    }
-
-    const fileData = data?.file || data?.binary || data?.data?.file || data?.data?.binary || data?.binary?.data;
-    
-    if (!fileData) {
-      return null;
-    }
-
-    const binaryData = fileData.data || fileData.binary || fileData.base64;
-
-    if (!binaryData) {
-      return null;
-    }
-
-    // Convert binary data to buffer
-    if (typeof binaryData === 'string') {
-      if (binaryData.startsWith('data:')) {
-        const base64Data = binaryData.split(',')[1] || binaryData;
-        return Buffer.from(base64Data, 'base64');
-      } else {
-        return Buffer.from(binaryData, 'base64');
+    try {
+      // Check if file came from multer (req.file)
+      if (n8nData.file && n8nData.file.buffer && Buffer.isBuffer(n8nData.file.buffer)) {
+        console.log('Extracting buffer from multer file, size:', n8nData.file.buffer.length);
+        return n8nData.file.buffer;
       }
-    } else if (Buffer.isBuffer(binaryData)) {
-      return binaryData;
-    }
 
-    return null;
+      // Fall back to parsing n8n data structure
+      let data = n8nData;
+      
+      if (Array.isArray(n8nData) && n8nData.length > 0) {
+        data = n8nData[0];
+      }
+
+      if (data && data.data && typeof data.data === 'object' && !Array.isArray(data.data)) {
+        data = data.data;
+      }
+
+      if (data && data.json && typeof data.json === 'object') {
+        data = data.json;
+      }
+
+      const fileData = data?.file || data?.binary || data?.data?.file || data?.data?.binary || data?.binary?.data;
+      
+      if (!fileData) {
+        console.warn('No file data found in n8n payload');
+        return null;
+      }
+
+      const binaryData = fileData.data || fileData.binary || fileData.base64;
+
+      if (!binaryData) {
+        console.warn('No binary data found in file data');
+        return null;
+      }
+
+      // Convert binary data to buffer
+      let buffer = null;
+      if (typeof binaryData === 'string') {
+        if (binaryData.startsWith('data:')) {
+          const base64Data = binaryData.split(',')[1] || binaryData;
+          buffer = Buffer.from(base64Data, 'base64');
+        } else {
+          buffer = Buffer.from(binaryData, 'base64');
+        }
+      } else if (Buffer.isBuffer(binaryData)) {
+        buffer = binaryData;
+      } else {
+        console.warn('Invalid binary data format:', typeof binaryData);
+        return null;
+      }
+
+      if (buffer && buffer.length > 0) {
+        console.log('Extracted buffer from n8n data structure, size:', buffer.length);
+        return buffer;
+      }
+
+      return null;
+    } catch (error) {
+      console.error('Error extracting PDF buffer:', error.message);
+      return null;
+    }
   }
 
   parseN8NData(n8nData) {
@@ -220,15 +271,42 @@ class CVService {
     };
   }
 
-  async processN8NFile(n8nData) {
-    let buffer;
+  async processN8NFile(n8nData, providedBuffer = null) {
+    let buffer = providedBuffer; // Use provided buffer if available
     let fileName;
     let fileExtension;
     let mimeType;
     let fileSize;
 
-    // First, check if file came from multer (req.file)
-    if (n8nData.file && n8nData.file.buffer) {
+    // If buffer was already provided, extract metadata from n8nData
+    if (buffer && Buffer.isBuffer(buffer)) {
+      console.log('Using provided buffer for file processing');
+      // First, check if file came from multer (req.file)
+      if (n8nData.file && n8nData.file.originalname) {
+        fileName = n8nData.file.originalname || `cv-${Date.now()}.pdf`;
+        fileExtension = path.extname(fileName).substring(1) || 'pdf';
+        mimeType = n8nData.file.mimetype || 'application/pdf';
+        fileSize = (n8nData.file.size / 1024).toFixed(2) + ' kB';
+      } else {
+        // Extract from n8n data structure
+        let data = n8nData;
+        if (Array.isArray(n8nData) && n8nData.length > 0) {
+          data = n8nData[0];
+        }
+        if (data && data.data && typeof data.data === 'object' && !Array.isArray(data.data)) {
+          data = data.data;
+        }
+        if (data && data.json && typeof data.json === 'object') {
+          data = data.json;
+        }
+        const fileData = data?.file || data?.binary || data?.data?.file || data?.data?.binary || data?.binary?.data;
+        fileName = fileData?.fileName || fileData?.['File Name'] || `cv-${Date.now()}.pdf`;
+        fileExtension = fileData?.fileExtension || fileData?.['File Extension'] || 'pdf';
+        mimeType = fileData?.mimeType || fileData?.['Mime Type'] || 'application/pdf';
+        fileSize = fileData?.fileSize || fileData?.['File Size'] || (buffer.length / 1024).toFixed(2) + ' kB';
+      }
+    } else if (n8nData.file && n8nData.file.buffer) {
+      // First, check if file came from multer (req.file)
       console.log('Processing file from multer (req.file)');
       buffer = n8nData.file.buffer;
       fileName = n8nData.file.originalname || `cv-${Date.now()}.pdf`;

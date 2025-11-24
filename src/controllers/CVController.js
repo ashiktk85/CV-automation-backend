@@ -38,8 +38,7 @@ class CVController {
       let fileData = undefined;
       if (req.file && req.file.buffer && req.file.buffer.length > 0) {
         console.log('File received via multer, buffer size:', req.file.buffer.length);
-        
-        // Validate PDF mimetype
+
         if (req.file.mimetype !== 'application/pdf') {
           return res.status(400).json({
             success: false,
@@ -55,7 +54,6 @@ class CVController {
           size: req.file.size,
         };
       } else {
-        // File might be in request body (JSON with base64)
         console.log('Checking request body for file data...');
         const bodyFile = raw.file || raw.binary || raw.data?.file || raw.data?.binary;
         if (bodyFile) {

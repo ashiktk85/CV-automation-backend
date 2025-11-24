@@ -1,26 +1,29 @@
-const pdfParse = require('pdf-parse');
+const { PDFParse } = require('pdf-parse');
 
-/**
- * Extracts plain text from a PDF buffer
- * @param {Buffer} buffer - PDF file buffer
- * @returns {Promise<string>} - Normalized text content
- */
 async function extractTextFromPdfBuffer(buffer) {
+  let parser;
+
   try {
-    const data = await pdfParse(buffer);
-    
-    // Normalize whitespace: remove weird line breaks / multiple spaces
-    const text = (data.text || '')
+    parser = new PDFParse({ data: buffer });
+
+
+    const result = await parser.getText();
+
+    const text = (result.text || '')
       .replace(/\r/g, ' ')
       .replace(/\n+/g, ' ')
       .replace(/\s+/g, ' ')
       .trim();
-    
+
     return text;
   } catch (error) {
+    console.error('❌ PDF parsing failed:', error);
     throw new Error(`Failed to extract text from PDF: ${error.message}`);
+  } finally {
+    if (parser) {
+      await parser.destroy().catch(() => {});
+    }
   }
 }
 
 module.exports = { extractTextFromPdfBuffer };
-
