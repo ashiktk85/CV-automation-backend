@@ -73,7 +73,7 @@ class CVService {
             console.log('🎯 Evaluating CV for Shopify position...');
             try {
               scoring = evaluateShopifyCV(cvText);
-              console.log(`✅ [Shopify Evaluation] Candidate: ${cvData.fullName || 'N/A'} | Decision: ${scoring.decision} | Score: ${scoring.score} | Rank: ${scoring.rank} | Experience matches: ${scoring.shopifyExperienceMatches} | Technical matches: ${scoring.technicalMatches}`);
+              console.log(`✅ [Shopify Evaluation] Candidate: ${cvData.fullName || 'N/A'} | Score: ${scoring.score} | Rank: ${scoring.rank} | Experience matches: ${scoring.shopifyExperienceMatches} | Technical matches: ${scoring.technicalMatches}`);
             } catch (scoreError) {
               console.error('❌ CV scoring failed:', scoreError.message);
               console.error('Scoring error stack:', scoreError.stack);
@@ -122,14 +122,13 @@ class CVService {
         timestamp: parseTimestamp(cvData.timestamp),
         fullName: cvData.fullName,
         email: cvData.email,
+        phoneNumber: cvData.phoneNumber || null,
         jobTitle: cvData.jobTitle,
         file: fileInfo,
         // Include scoring data if available
         ...(scoring ? {
           score: scoring.score,
           rank: scoring.rank,
-          decision: scoring.decision,
-          hasLiquid: scoring.hasLiquid,
           shopifyExperienceMatches: scoring.shopifyExperienceMatches,
           technicalMatches: scoring.technicalMatches,
           matchedExperience: scoring.matchedExperience,
@@ -140,10 +139,10 @@ class CVService {
 
       console.log('Creating CV record with file info:', {
         fileName: fileInfo.fileName,
-        localFilePath: fileInfo.localFilePath,
         supabaseUrl: fileInfo.supabaseUrl,
+        supabasePath: fileInfo.supabasePath,
         score: scoring?.score,
-        decision: scoring?.decision
+        rank: scoring?.rank
       });
 
       const createdCV = await this.cvRepository.create(cvRecord);
@@ -159,10 +158,8 @@ class CVService {
       return {
         success: true,
         message: 'CV received from n8n successfully',
-        decision: scoring?.decision || null,
         score: scoring?.score || null,
         rank: scoring?.rank || null,
-        hasLiquid: scoring?.hasLiquid || null,
         shopifyExperienceMatches: scoring?.shopifyExperienceMatches || null,
         technicalMatches: scoring?.technicalMatches || null,
         matchedExperience: scoring?.matchedExperience || [],
@@ -176,11 +173,8 @@ class CVService {
     }
   }
 
-  /**
-   * Extracts PDF buffer from n8n data
-   * @param {Object} n8nData - n8n webhook data
-   * @returns {Promise<Buffer>} - PDF buffer or null
-   */
+
+
   async getPdfBuffer(n8nData) {
     try {
       // Check if file came from multer (req.file)
@@ -372,10 +366,6 @@ class CVService {
 
     console.log(`Processing file: ${fileName}, size: ${buffer.length} bytes`);
 
-    // Save file to filtered-cvs folder first
-    const localFileInfo = await this.fileUploadService.saveToFilteredCvs(buffer, fileName);
-    console.log('File saved to filtered-cvs:', localFileInfo.filePath);
-
     // Upload to Supabase (file will be compressed before upload)
     let supabaseResult = null;
     try {
@@ -387,7 +377,12 @@ class CVService {
       console.log('File uploaded to Supabase:', supabaseResult.path);
       console.log('Supabase URL:', supabaseResult.url);
     } catch (supabaseError) {
-      console.warn('Supabase upload failed, continuing with local file only:', supabaseError.message);
+      console.error('Supabase upload failed:', supabaseError.message);
+      throw new Error(`Failed to upload file to Supabase: ${supabaseError.message}`);
+    }
+
+    if (!supabaseResult) {
+      throw new Error('Failed to upload file to Supabase');
     }
 
     return {
@@ -395,11 +390,9 @@ class CVService {
       fileExtension: fileExtension,
       mimeType: mimeType,
       fileSize: fileSize,
-      localFilePath: localFileInfo.filePath,
-      localFileName: localFileInfo.fileName,
-      supabasePath: supabaseResult?.path || null,
-      supabaseUrl: supabaseResult?.url || null,
-      supabaseBucket: supabaseResult?.bucket || null
+      supabasePath: supabaseResult.path,
+      supabaseUrl: supabaseResult.url,
+      supabaseBucket: supabaseResult.bucket || 'cvs'
     };
   }
 
@@ -419,6 +412,297 @@ class CVService {
       };
     } catch (error) {
       throw new Error(`Failed to get all CVs: ${error.message}`);
+    }
+  }
+
+  /**
+   * Get accepted CVs (score >= 50) - filtered at database level with search, sort, filter, and pagination
+   */
+  async getAcceptedCVs(options = {}) {
+    try {
+      const baseQuery = { score: { $gte: 50, $ne: null } };
+      const result = await this.cvRepository.findWithOptions(baseQuery, {
+        ...options,
+        minScore: options.minScore || 50,
+        page: options.page || 1,
+        limit: options.limit || 12
+      });
+      return {
+        success: true,
+        data: result.data,
+        pagination: result.pagination
+      };
+    } catch (error) {
+      throw new Error(`Failed to get accepted CVs: ${error.message}`);
+    }
+  }
+
+  /**
+   * Get Shopify applicants (CVs with scoring data) - filtered at database level with search, sort, filter, and pagination
+   */
+  async getShopifyApplicants(options = {}) {
+    try {
+      const baseQuery = {
+        score: { $ne: null },
+        jobTitle: { $eq: "Shopify" }
+      };
+      const result = await this.cvRepository.findWithOptions(baseQuery, {
+        ...options,
+        page: options.page || 1,
+        limit: options.limit || 12
+      });
+      return {
+        success: true,
+        data: result.data,
+        pagination: result.pagination
+      };
+    } catch (error) {
+      throw new Error(`Failed to get Shopify applicants: ${error.message}`);
+    }
+  }
+
+  /**
+   * Get rejected CVs (score < 50 OR no score) - filtered at database level with search, sort, filter, and pagination
+   */
+  async getRejectedCVs(options = {}) {
+    try {
+      const baseQuery = {
+        $or: [
+          { score: { $lt: 50, $ne: null } },
+          { score: null },
+          { score: { $exists: false } }
+        ]
+      };
+      const result = await this.cvRepository.findWithOptions(baseQuery, {
+        ...options,
+        page: options.page || 1,
+        limit: options.limit || 12
+      });
+      return {
+        success: true,
+        data: result.data,
+        pagination: result.pagination
+      };
+    } catch (error) {
+      throw new Error(`Failed to get rejected CVs: ${error.message}`);
+    }
+  }
+
+  /**
+   * Get starred CVs with search, sort, filter, and pagination
+   */
+  async getStarredCVs(options = {}) {
+    try {
+      const baseQuery = { starred: true };
+      const result = await this.cvRepository.findWithOptions(baseQuery, {
+        ...options,
+        page: options.page || 1,
+        limit: options.limit || 12
+      });
+      return {
+        success: true,
+        data: result.data,
+        pagination: result.pagination
+      };
+    } catch (error) {
+      throw new Error(`Failed to get starred CVs: ${error.message}`);
+    }
+  }
+
+  /**
+   * Get analytics for accepted CVs
+   */
+  async getAcceptedAnalytics() {
+    try {
+      const now = new Date();
+      const today = new Date(now.setHours(0, 0, 0, 0));
+      const weekAgo = new Date(now.setDate(now.getDate() - 7));
+      const monthAgo = new Date(now.setMonth(now.getMonth() - 1));
+
+      const baseQuery = { score: { $gte: 50, $ne: null } };
+
+      const [total, todayCount, weekCount, monthCount] = await Promise.all([
+        this.cvRepository.countWithQuery(baseQuery),
+        this.cvRepository.countWithQuery(baseQuery, today, new Date()),
+        this.cvRepository.countWithQuery(baseQuery, weekAgo, new Date()),
+        this.cvRepository.countWithQuery(baseQuery, monthAgo, new Date())
+      ]);
+
+      return {
+        success: true,
+        data: {
+          total,
+          today: todayCount,
+          week: weekCount,
+          month: monthCount
+        }
+      };
+    } catch (error) {
+      throw new Error(`Failed to get accepted analytics: ${error.message}`);
+    }
+  }
+
+  /**
+   * Get analytics for Shopify applicants
+   */
+  async getShopifyAnalytics() {
+    try {
+      const now = new Date();
+      const today = new Date(now.setHours(0, 0, 0, 0));
+      const weekAgo = new Date(now.setDate(now.getDate() - 7));
+      const monthAgo = new Date(now.setMonth(now.getMonth() - 1));
+
+      const baseQuery = {
+        score: { $ne: null },
+        jobTitle: { $eq: "Shopify" }
+      };
+
+      const [total, todayCount, weekCount, monthCount] = await Promise.all([
+        this.cvRepository.countWithQuery(baseQuery),
+        this.cvRepository.countWithQuery(baseQuery, today, new Date()),
+        this.cvRepository.countWithQuery(baseQuery, weekAgo, new Date()),
+        this.cvRepository.countWithQuery(baseQuery, monthAgo, new Date())
+      ]);
+
+      return {
+        success: true,
+        data: {
+          total,
+          today: todayCount,
+          week: weekCount,
+          month: monthCount
+        }
+      };
+    } catch (error) {
+      throw new Error(`Failed to get Shopify analytics: ${error.message}`);
+    }
+  }
+
+  /**
+   * Get analytics for rejected CVs
+   */
+  async getRejectedAnalytics() {
+    try {
+      const now = new Date();
+      const today = new Date(now.setHours(0, 0, 0, 0));
+      const weekAgo = new Date(now.setDate(now.getDate() - 7));
+      const monthAgo = new Date(now.setMonth(now.getMonth() - 1));
+
+      const baseQuery = {
+        $or: [
+          { score: { $lt: 50, $ne: null } },
+          { score: null },
+          { score: { $exists: false } }
+        ]
+      };
+
+      const [total, todayCount, weekCount, monthCount] = await Promise.all([
+        this.cvRepository.countWithQuery(baseQuery),
+        this.cvRepository.countWithQuery(baseQuery, today, new Date()),
+        this.cvRepository.countWithQuery(baseQuery, weekAgo, new Date()),
+        this.cvRepository.countWithQuery(baseQuery, monthAgo, new Date())
+      ]);
+
+      return {
+        success: true,
+        data: {
+          total,
+          today: todayCount,
+          week: weekCount,
+          month: monthCount
+        }
+      };
+    } catch (error) {
+      throw new Error(`Failed to get rejected analytics: ${error.message}`);
+    }
+  }
+
+  /**
+   * Get analytics for starred CVs
+   */
+  async getStarredAnalytics() {
+    try {
+      const now = new Date();
+      const today = new Date(now.setHours(0, 0, 0, 0));
+      const weekAgo = new Date(now.setDate(now.getDate() - 7));
+      const monthAgo = new Date(now.setMonth(now.getMonth() - 1));
+
+      const baseQuery = { starred: true };
+
+      const [total, todayCount, weekCount, monthCount] = await Promise.all([
+        this.cvRepository.countWithQuery(baseQuery),
+        this.cvRepository.countWithQuery(baseQuery, today, new Date()),
+        this.cvRepository.countWithQuery(baseQuery, weekAgo, new Date()),
+        this.cvRepository.countWithQuery(baseQuery, monthAgo, new Date())
+      ]);
+
+      return {
+        success: true,
+        data: {
+          total,
+          today: todayCount,
+          week: weekCount,
+          month: monthCount
+        }
+      };
+    } catch (error) {
+      throw new Error(`Failed to get starred analytics: ${error.message}`);
+    }
+  }
+
+  /**
+   * Update starred status for a CV
+   */
+  async updateStarredStatus(id, starred) {
+    try {
+      const updated = await this.cvRepository.updateStarred(id, starred);
+      if (!updated) {
+        throw new Error('CV not found');
+      }
+      return {
+        success: true,
+        data: updated,
+        message: `CV ${starred ? 'starred' : 'unstarred'} successfully`
+      };
+    } catch (error) {
+      throw new Error(`Failed to update starred status: ${error.message}`);
+    }
+  }
+
+  /**
+   * Delete a CV and its associated files from Supabase and local storage
+   */
+  async deleteCV(id) {
+    try {
+      // First, get the CV to retrieve file paths
+      const cv = await this.cvRepository.findById(id);
+      if (!cv) {
+        throw new Error('CV not found');
+      }
+
+      // Delete from Supabase if file exists
+      if (cv.file && cv.file.supabasePath) {
+        try {
+          await this.fileUploadService.supabaseService.deleteFile(cv.file.supabasePath);
+          console.log(`Deleted file from Supabase: ${cv.file.supabasePath}`);
+        } catch (supabaseError) {
+          console.warn(`Failed to delete file from Supabase: ${supabaseError.message}`);
+          // Continue with deletion even if Supabase deletion fails
+        }
+      }
+
+      // Delete from MongoDB
+      const deleted = await this.cvRepository.deleteById(id);
+      if (!deleted) {
+        throw new Error('Failed to delete CV from database');
+      }
+
+      return {
+        success: true,
+        message: 'CV and associated files deleted successfully'
+      };
+    } catch (error) {
+      throw new Error(`Failed to delete CV: ${error.message}`);
     }
   }
 }

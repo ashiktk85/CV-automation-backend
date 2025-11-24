@@ -48,7 +48,7 @@ const SHOPIFY_EXPERIENCE_SKILLS = {
   ]
 };
 
-// Technical Shopify Skills with keyword patterns
+
 const TECHNICAL_SKILLS = {
   shopify_liquid: [
     'shopify liquid',
@@ -137,88 +137,71 @@ function evaluateShopifyCV(rawText) {
   // Gate check: Need at least 2 distinct Shopify experience skills
   if (shopifyExperienceMatches < 2) {
     return {
-      decision: 'NO',
       score: 0,
       rank: 'REJECT_NO_SHOPIFY_EXP',
       shopifyExperienceMatches,
       technicalMatches: 0,
-      hasLiquid: false,
       matchedExperience,
       matchedTechnicalSkills: [],
       reason: 'Not enough Shopify experience (need at least 2 distinct Shopify responsibilities).'
     };
   }
   
-  // Base score of 50 for passing the experience gate
-  let baseScore = 50;
-  
   // Phase 2: Technical Shopify Skills + Ranking
   const matchedTechnicalSkills = [];
   let technicalMatches = 0;
-  let hasLiquid = false;
   
   for (const [skillId, patterns] of Object.entries(TECHNICAL_SKILLS)) {
     if (matchesPattern(normalizedText, patterns)) {
       matchedTechnicalSkills.push(skillId);
       technicalMatches++;
-      
-      if (skillId === 'shopify_liquid') {
-        hasLiquid = true;
-      }
     }
   }
   
-  // Liquid is mandatory
-  if (!hasLiquid) {
-    return {
-      decision: 'NO',
-      score: baseScore,
-      rank: 'REJECT_NO_LIQUID',
-      shopifyExperienceMatches,
-      technicalMatches,
-      hasLiquid: false,
-      matchedExperience,
-      matchedTechnicalSkills,
-      reason: 'Missing Shopify Liquid (mandatory skill).'
-    };
-  }
+  // Calculate score based on shopifyExperienceMatches and technical skills
+  let finalScore = 0;
   
-  // Calculate technical score (max 50 points)
-  const technicalScore = Math.min(technicalMatches * 10, 50);
-  const finalScore = Math.min(100, baseScore + technicalScore);
-  
-  // Determine rank based on score and technical matches
-  let rank;
-  if (finalScore >= 85 && technicalMatches >= 4) {
-    rank = 'S'; // Strong dev
-  } else if (finalScore >= 70 && technicalMatches >= 3) {
-    rank = 'A'; // Solid dev
-  } else if (finalScore >= 55 && technicalMatches >= 2) {
-    rank = 'B'; // Mid / okay
-  } else if (finalScore >= 50 && technicalMatches >= 1) {
-    rank = 'C'; // Minimum pass
+  // If shopifyExperienceMatches >= 3, give base score of 50
+  if (shopifyExperienceMatches >= 3) {
+    const baseScore = 50;
+    // Additional points for technical skills (max 50 additional points)
+    const technicalBonus = Math.min(technicalMatches * 10, 50);
+    finalScore = Math.min(100, baseScore + technicalBonus);
   } else {
-    rank = 'REJECT';
+    // Less than 3 shopify experience matches = rejected (score < 50)
+    // But still give some points based on technical skills
+    finalScore = Math.min(49, technicalMatches * 10);
   }
   
-  // Decision based on rank
-  const decision = (rank === 'S' || rank === 'A' || rank === 'B' || rank === 'C') ? 'YES' : 'NO';
+  // Determine rank based on score and matches
+  let rank;
+  if (finalScore >= 85 && shopifyExperienceMatches >= 3) {
+    rank = 'S'; // Strong dev
+  } else if (finalScore >= 70 && shopifyExperienceMatches >= 3) {
+    rank = 'A'; // Solid dev
+  } else if (finalScore >= 55 && shopifyExperienceMatches >= 3) {
+    rank = 'B'; // Mid / okay
+  } else if (finalScore >= 50 && shopifyExperienceMatches >= 3) {
+    rank = 'C'; // Minimum pass (50 points with at least 3 Shopify experience skills)
+  } else {
+    rank = 'REJECT'; // Score < 50 or less than 3 Shopify experience skills
+  }
   
   // Generate reason
   let reason = '';
-  if (decision === 'YES') {
-    reason = `Passed evaluation with rank ${rank}. Found ${shopifyExperienceMatches} Shopify experience skills and ${technicalMatches} technical skills including Liquid.`;
+  if (finalScore >= 50 && shopifyExperienceMatches >= 3) {
+    reason = `Passed evaluation with rank ${rank}. Found ${shopifyExperienceMatches} Shopify experience skills and ${technicalMatches} technical skills.`;
+  } else if (shopifyExperienceMatches < 3) {
+    reason = `Rejected: Need at least 3 Shopify experience skills to achieve 50 points. Found ${shopifyExperienceMatches} Shopify experience skills.`;
   } else {
-    reason = `Did not meet minimum requirements. Score: ${finalScore}, Technical matches: ${technicalMatches}.`;
+    reason = `Rejected: Score ${finalScore} is below the minimum threshold of 50.`;
   }
   
   return {
-    decision,
     score: finalScore,
     rank,
     shopifyExperienceMatches,
     technicalMatches,
-    hasLiquid,
     matchedExperience,
     matchedTechnicalSkills,
     reason

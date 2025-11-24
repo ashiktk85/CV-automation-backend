@@ -16,14 +16,13 @@ const cvSchema = new mongoose.Schema({
   timestamp: { type: Date, required: true },
   fullName: { type: String, required: true },
   email: { type: String, required: true },
+  phoneNumber: { type: String, required: false },
   jobTitle: { type: String, required: true },
   file: { type: fileSchema, required: true },
   starred: { type: Boolean, default: false },
   // Shopify scoring fields
   score: { type: Number, required: false },
   rank: { type: String, required: false },
-  decision: { type: String, required: false }, // YES or NO
-  hasLiquid: { type: Boolean, required: false },
   shopifyExperienceMatches: { type: Number, required: false },
   technicalMatches: { type: Number, required: false },
   matchedExperience: { type: [String], default: [] },

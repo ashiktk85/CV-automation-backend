@@ -16,6 +16,8 @@ const CVService = require('./src/services/CVService');
 const FileUploadService = require('./src/services/FileUploadService');
 const CVController = require('./src/controllers/CVController');
 const CVRoutes = require('./src/routes/cvRoutes');
+const AuthController = require('./src/controllers/AuthController');
+const AuthRoutes = require('./src/routes/authRoutes');
 const SocketConfig = require('./src/config/socketConfig');
 
 const app = express();
@@ -69,10 +71,13 @@ const cvService = new CVService(cvRepository, io, fileUploadService);
 const cvController = new CVController(cvService, fileUploadService);
 
 const cvRoutes = new CVRoutes(cvController, upload);
+const authController = new AuthController();
+const authRoutes = new AuthRoutes(authController);
 
 new SocketConfig(io);
 
 cvRoutes.setupRoutes(app);
+authRoutes.setupRoutes(app);
 
 async function startServer() {
   try {

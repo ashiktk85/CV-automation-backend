@@ -22,6 +22,194 @@ class CVController {
     }
   }
 
+  async getStarredCVs(req, res) {
+    try {
+      const { search, minScore, sortBy, sortOrder, page, limit } = req.query;
+      const options = {
+        search: search || null,
+        minScore: minScore ? parseInt(minScore) : null,
+        sortBy: sortBy || 'createdAt',
+        sortOrder: sortOrder || 'desc',
+        page: page ? parseInt(page) : 1,
+        limit: limit ? parseInt(limit) : 12
+      };
+      const result = await this.cvService.getStarredCVs(options);
+      return res.status(200).json(result);
+    } catch (error) {
+      console.error('Error fetching starred CVs:', error);
+      return res.status(500).json({
+        success: false,
+        error: 'Failed to fetch starred CVs',
+        details: error.message,
+      });
+    }
+  }
+
+  async updateStarredStatus(req, res) {
+    try {
+      const { id } = req.params;
+      const { starred } = req.body;
+
+      if (typeof starred !== 'boolean') {
+        return res.status(400).json({
+          success: false,
+          error: 'Invalid request',
+          details: 'starred must be a boolean value',
+        });
+      }
+
+      const result = await this.cvService.updateStarredStatus(id, starred);
+      return res.status(200).json(result);
+    } catch (error) {
+      console.error('Error updating starred status:', error);
+      return res.status(500).json({
+        success: false,
+        error: 'Failed to update starred status',
+        details: error.message,
+      });
+    }
+  }
+
+  async deleteCV(req, res) {
+    try {
+      const { id } = req.params;
+      const result = await this.cvService.deleteCV(id);
+      return res.status(200).json(result);
+    } catch (error) {
+      console.error('Error deleting CV:', error);
+      return res.status(500).json({
+        success: false,
+        error: 'Failed to delete CV',
+        details: error.message,
+      });
+    }
+  }
+
+  async getAcceptedCVs(req, res) {
+    try {
+      const { search, minScore, sortBy, sortOrder, page, limit } = req.query;
+      const options = {
+        search: search || null,
+        minScore: minScore ? parseInt(minScore) : 50,
+        sortBy: sortBy || 'createdAt',
+        sortOrder: sortOrder || 'desc',
+        page: page ? parseInt(page) : 1,
+        limit: limit ? parseInt(limit) : 12
+      };
+      const result = await this.cvService.getAcceptedCVs(options);
+      return res.status(200).json(result);
+    } catch (error) {
+      console.error('Error fetching accepted CVs:', error);
+      return res.status(500).json({
+        success: false,
+        error: 'Failed to fetch accepted CVs',
+        details: error.message,
+      });
+    }
+  }
+
+  async getShopifyApplicants(req, res) {
+    try {
+      const { search, minScore, sortBy, sortOrder, page, limit } = req.query;
+      const options = {
+        search: search || null,
+        minScore: minScore ? parseInt(minScore) : null,
+        sortBy: sortBy || 'createdAt',
+        sortOrder: sortOrder || 'desc',
+        page: page ? parseInt(page) : 1,
+        limit: limit ? parseInt(limit) : 12
+      };
+      const result = await this.cvService.getShopifyApplicants(options);
+      return res.status(200).json(result);
+    } catch (error) {
+      console.error('Error fetching Shopify applicants:', error);
+      return res.status(500).json({
+        success: false,
+        error: 'Failed to fetch Shopify applicants',
+        details: error.message,
+      });
+    }
+  }
+
+  async getRejectedCVs(req, res) {
+    try {
+      const { search, minScore, sortBy, sortOrder, page, limit } = req.query;
+      const options = {
+        search: search || null,
+        minScore: minScore ? parseInt(minScore) : null,
+        sortBy: sortBy || 'createdAt',
+        sortOrder: sortOrder || 'desc',
+        page: page ? parseInt(page) : 1,
+        limit: limit ? parseInt(limit) : 12
+      };
+      const result = await this.cvService.getRejectedCVs(options);
+      return res.status(200).json(result);
+    } catch (error) {
+      console.error('Error fetching rejected CVs:', error);
+      return res.status(500).json({
+        success: false,
+        error: 'Failed to fetch rejected CVs',
+        details: error.message,
+      });
+    }
+  }
+
+  async getAcceptedAnalytics(req, res) {
+    try {
+      const result = await this.cvService.getAcceptedAnalytics();
+      return res.status(200).json(result);
+    } catch (error) {
+      console.error('Error fetching accepted analytics:', error);
+      return res.status(500).json({
+        success: false,
+        error: 'Failed to fetch accepted analytics',
+        details: error.message,
+      });
+    }
+  }
+
+  async getShopifyAnalytics(req, res) {
+    try {
+      const result = await this.cvService.getShopifyAnalytics();
+      return res.status(200).json(result);
+    } catch (error) {
+      console.error('Error fetching Shopify analytics:', error);
+      return res.status(500).json({
+        success: false,
+        error: 'Failed to fetch Shopify analytics',
+        details: error.message,
+      });
+    }
+  }
+
+  async getRejectedAnalytics(req, res) {
+    try {
+      const result = await this.cvService.getRejectedAnalytics();
+      return res.status(200).json(result);
+    } catch (error) {
+      console.error('Error fetching rejected analytics:', error);
+      return res.status(500).json({
+        success: false,
+        error: 'Failed to fetch rejected analytics',
+        details: error.message,
+      });
+    }
+  }
+
+  async getStarredAnalytics(req, res) {
+    try {
+      const result = await this.cvService.getStarredAnalytics();
+      return res.status(200).json(result);
+    } catch (error) {
+      console.error('Error fetching starred analytics:', error);
+      return res.status(500).json({
+        success: false,
+        error: 'Failed to fetch starred analytics',
+        details: error.message,
+      });
+    }
+  }
+
   async receiveN8NWebhook(req, res) {
     try {
       console.log('Received n8n webhook request');
@@ -37,7 +225,7 @@ class CVController {
       // Check if file came via multer (multipart/form-data)
       let fileData = undefined;
       if (req.file && req.file.buffer && req.file.buffer.length > 0) {
-        console.log('File received via multer, buffer size:', req.file.buffer.length);
+      
 
         if (req.file.mimetype !== 'application/pdf') {
           return res.status(400).json({
