@@ -28,7 +28,7 @@ class CVController {
       console.log('Content-Type:', req.headers['content-type']);
       console.log('Request body keys:', Object.keys(req.body || {}));
       console.log('File info:', {
-        file: req.file ? req.file.originalname : 'no file received via multer',
+        file: req.file ? "File received via multer" : 'no file received via multer',
       });
   
 
