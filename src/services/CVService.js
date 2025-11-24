@@ -29,8 +29,9 @@ class CVService {
           fileExtension: 'pdf',
           mimeType: 'application/pdf',
           fileSize: '0 kB',
-          googleDriveFileId: null,
-          googleDriveLink: null
+          cloudinaryPublicId: null,
+          cloudinaryUrl: null,
+          cloudinaryFormat: null
         };
       }
 
@@ -61,7 +62,7 @@ class CVService {
       console.log('Creating CV record with file info:', {
         fileName: fileInfo.fileName,
         localFilePath: fileInfo.localFilePath,
-        googleDriveLink: fileInfo.googleDriveLink
+        cloudinaryUrl: fileInfo.cloudinaryUrl
       });
 
       const createdCV = await this.cvRepository.create(cvRecord);
@@ -181,17 +182,18 @@ class CVService {
     const localFileInfo = await this.fileUploadService.saveToFilteredCvs(buffer, fileName);
     console.log('File saved to filtered-cvs:', localFileInfo.filePath);
 
-    // Optionally upload to Google Drive (you can make this conditional)
-    let googleDriveResult = null;
+    // Upload to Cloudinary (file will be compressed before upload)
+    let cloudinaryResult = null;
     try {
-      googleDriveResult = await this.fileUploadService.uploadToGoogleDrive(
+      cloudinaryResult = await this.fileUploadService.uploadToCloudinary(
         buffer,
         fileName,
         mimeType
       );
-      console.log('File uploaded to Google Drive:', googleDriveResult.fileId);
-    } catch (driveError) {
-      console.warn('Google Drive upload failed, continuing with local file only:', driveError.message);
+      console.log('File uploaded to Cloudinary:', cloudinaryResult.publicId);
+      console.log('Cloudinary URL:', cloudinaryResult.url);
+    } catch (cloudinaryError) {
+      console.warn('Cloudinary upload failed, continuing with local file only:', cloudinaryError.message);
     }
 
     return {
@@ -201,8 +203,9 @@ class CVService {
       fileSize: fileSize,
       localFilePath: localFileInfo.filePath,
       localFileName: localFileInfo.fileName,
-      googleDriveFileId: googleDriveResult?.fileId || null,
-      googleDriveLink: googleDriveResult?.directLink || null
+      cloudinaryPublicId: cloudinaryResult?.publicId || null,
+      cloudinaryUrl: cloudinaryResult?.url || null,
+      cloudinaryFormat: cloudinaryResult?.format || null
     };
   }
 

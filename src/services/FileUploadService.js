@@ -3,10 +3,10 @@ const path = require('path');
 const fs = require('fs');
 
 class FileUploadService {
-  constructor(uploadsDir, filteredCvsDir, googleDriveService) {
+  constructor(uploadsDir, filteredCvsDir, cloudinaryService) {
     this.uploadsDir = uploadsDir;
     this.filteredCvsDir = filteredCvsDir;
-    this.googleDriveService = googleDriveService;
+    this.cloudinaryService = cloudinaryService;
     this.initializeDirectory();
     this.upload = this.configureMulter();
   }
@@ -66,7 +66,7 @@ class FileUploadService {
     }
   }
 
-  async uploadToGoogleDrive(binaryData, fileName, mimeType) {
+  async uploadToCloudinary(binaryData, fileName, mimeType) {
     try {
       let buffer;
       
@@ -83,10 +83,11 @@ class FileUploadService {
         throw new Error('Invalid binary data format');
       }
 
-      const result = await this.googleDriveService.uploadFile(buffer, fileName, mimeType);
+      // File will be compressed inside CloudinaryService before uploading
+      const result = await this.cloudinaryService.uploadFile(buffer, fileName, mimeType);
       return result;
     } catch (error) {
-      throw new Error(`Failed to upload file to Google Drive: ${error.message}`);
+      throw new Error(`Failed to upload file to Cloudinary: ${error.message}`);
     }
   }
 
