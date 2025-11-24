@@ -46,6 +46,16 @@ class CVController {
       let fileData = undefined;
       if (req.file && req.file.buffer && req.file.buffer.length > 0) {
         console.log('File received via multer, buffer size:', req.file.buffer.length);
+        
+        // Validate PDF mimetype
+        if (req.file.mimetype !== 'application/pdf') {
+          return res.status(400).json({
+            success: false,
+            error: 'Invalid file type',
+            details: 'File must be a PDF (application/pdf). Received: ' + req.file.mimetype
+          });
+        }
+        
         fileData = {
           buffer: req.file.buffer,           
           originalname: req.file.originalname,
