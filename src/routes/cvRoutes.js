@@ -17,9 +17,9 @@ class CVRoutes {
       app.get('/api/cv/analytics/rejected', (req, res) => this.cvController.getRejectedAnalytics(req, res));
       app.get('/api/cv/analytics/starred', (req, res) => this.cvController.getStarredAnalytics(req, res));
       app.patch('/api/cv/:id/starred', (req, res) => this.cvController.updateStarredStatus(req, res));
-      app.delete('/api/cv/:id', (req, res) => this.cvController.deleteCV(req, res));
       app.delete('/api/cv/bulk', (req, res) => this.cvController.deleteBulkCVs(req, res));
       app.delete('/api/cv/rejected/all', (req, res) => this.cvController.deleteAllRejected(req, res));
+      app.delete('/api/cv/:id', (req, res) => this.cvController.deleteCV(req, res));
       app.post('/api/cv/n8n-webhook', this.upload.single('file'), (req, res) => this.cvController.receiveN8NWebhook(req, res));
       app.get('/api/health', (req, res) => this.cvController.getHealthCheck(req, res));
     }
