@@ -179,8 +179,23 @@ function estimateYearsOfExperience(text) {
       return 0; 
     }
   }
-  
 
+  if (maxYears === null) {
+    if (
+      text.includes("one year") ||
+      text.includes("one year experience") ||
+      text.includes("two years") ||
+      text.includes("two years experience") ||
+      text.includes("three years") ||
+      text.includes("three years experience") ||
+      text.includes("four years") ||
+      text.includes("four years experience") ||
+      text.includes("five years") ||
+      text.includes("five years experience") 
+    ) {
+      return 1; 
+    }
+  }
   return maxYears;
 }
 
