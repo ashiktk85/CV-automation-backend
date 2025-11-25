@@ -5,7 +5,7 @@ class CVRepository {
 
   async findAll() {
     try {
-      return await this.cvModel.find().sort({ createdAt: -1 });
+      return await this.cvModel.find().sort({ score: 1 });
     } catch (error) {
       throw new Error(`Failed to find all CVs: ${error.message}`);
     }
@@ -108,6 +108,52 @@ class CVRepository {
       return await this.cvModel.findByIdAndDelete(id);
     } catch (error) {
       throw new Error(`Failed to delete CV: ${error.message}`);
+    }
+  }
+
+  async findByIds(ids = []) {
+    try {
+      return await this.cvModel.find({ _id: { $in: ids } });
+    } catch (error) {
+      throw new Error(`Failed to find CVs by IDs: ${error.message}`);
+    }
+  }
+
+  async deleteMany(ids = []) {
+    try {
+      return await this.cvModel.deleteMany({ _id: { $in: ids } });
+    } catch (error) {
+      throw new Error(`Failed to bulk delete CVs: ${error.message}`);
+    }
+  }
+
+  async findRejectedDocs() {
+    try {
+      const rejectedQuery = {
+        $or: [
+          { score: { $lt: 50, $ne: null } },
+          { score: null },
+          { score: { $exists: false } }
+        ]
+      };
+      return await this.cvModel.find(rejectedQuery);
+    } catch (error) {
+      throw new Error(`Failed to find rejected CVs: ${error.message}`);
+    }
+  }
+
+  async deleteRejected() {
+    try {
+      const rejectedQuery = {
+        $or: [
+          { score: { $lt: 50, $ne: null } },
+          { score: null },
+          { score: { $exists: false } }
+        ]
+      };
+      return await this.cvModel.deleteMany(rejectedQuery);
+    } catch (error) {
+      throw new Error(`Failed to delete rejected CVs: ${error.message}`);
     }
   }
 

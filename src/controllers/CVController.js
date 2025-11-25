@@ -85,6 +85,43 @@ class CVController {
     }
   }
 
+  async deleteBulkCVs(req, res) {
+    try {
+      const { ids } = req.body;
+      if (!Array.isArray(ids) || ids.length === 0) {
+        return res.status(400).json({
+          success: false,
+          error: 'Invalid request',
+          details: 'ids array is required'
+        });
+      }
+
+      const result = await this.cvService.deleteBulk(ids);
+      return res.status(200).json(result);
+    } catch (error) {
+      console.error('Error bulk deleting CVs:', error);
+      return res.status(500).json({
+        success: false,
+        error: 'Failed to bulk delete CVs',
+        details: error.message,
+      });
+    }
+  }
+
+  async deleteAllRejected(req, res) {
+    try {
+      const result = await this.cvService.deleteAllRejected();
+      return res.status(200).json(result);
+    } catch (error) {
+      console.error('Error deleting all rejected CVs:', error);
+      return res.status(500).json({
+        success: false,
+        error: 'Failed to delete rejected CVs',
+        details: error.message,
+      });
+    }
+  }
+
   async getAcceptedCVs(req, res) {
     try {
       const { search, minScore, sortBy, sortOrder, page, limit } = req.query;
@@ -126,6 +163,29 @@ class CVController {
       return res.status(500).json({
         success: false,
         error: 'Failed to fetch Shopify applicants',
+        details: error.message,
+      });
+    }
+  }
+
+  async getGcmsApplicants(req, res) {
+    try {
+      const { search, minScore, sortBy, sortOrder, page, limit } = req.query;
+      const options = {
+        search: search || null,
+        minScore: minScore ? parseInt(minScore) : null,
+        sortBy: sortBy || 'createdAt',
+        sortOrder: sortOrder || 'desc',
+        page: page ? parseInt(page) : 1,
+        limit: limit ? parseInt(limit) : 12
+      };
+      const result = await this.cvService.getGcmsApplicants(options);
+      return res.status(200).json(result);
+    } catch (error) {
+      console.error('Error fetching GCMS applicants:', error);
+      return res.status(500).json({
+        success: false,
+        error: 'Failed to fetch GCMS applicants',
         details: error.message,
       });
     }
@@ -177,6 +237,20 @@ class CVController {
       return res.status(500).json({
         success: false,
         error: 'Failed to fetch Shopify analytics',
+        details: error.message,
+      });
+    }
+  }
+
+  async getGcmsAnalytics(req, res) {
+    try {
+      const result = await this.cvService.getGcmsAnalytics();
+      return res.status(200).json(result);
+    } catch (error) {
+      console.error('Error fetching GCMS analytics:', error);
+      return res.status(500).json({
+        success: false,
+        error: 'Failed to fetch GCMS analytics',
         details: error.message,
       });
     }

@@ -18,6 +18,7 @@ const cvSchema = new mongoose.Schema({
   email: { type: String, required: true },
   phoneNumber: { type: String, required: false },
   jobTitle: { type: String, required: true },
+  jobCategory: { type: String, enum: ['SHOPIFY', 'GCMS', 'GENERAL'], default: 'GENERAL' },
   file: { type: fileSchema, required: true },
   starred: { type: Boolean, default: false },
   // Shopify scoring fields
@@ -28,6 +29,12 @@ const cvSchema = new mongoose.Schema({
   matchedExperience: { type: [String], default: [] },
   matchedTechnicalSkills: { type: [String], default: [] },
   reason: { type: String, required: false },
+  evaluationRole: { type: String, required: false },
+  // GCMS evaluation fields
+  gcmsPositiveGroupsHit: { type: Number, required: false },
+  gcmsMinPositiveGroupsRequired: { type: Number, required: false },
+  gcmsMatchedGroups: { type: [String], default: [] },
+  gcmsMatchedKeywords: { type: mongoose.Schema.Types.Mixed, default: {} },
   createdAt: { type: Date, default: Date.now }
 }, {
   timestamps: true

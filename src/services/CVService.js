@@ -1,6 +1,7 @@
 const path = require('path');
 const { extractTextFromPdfBuffer } = require('../utils/pdfExtractor');
-const { evaluateShopifyCV } = require('./shopifyEvaluator');
+const { evaluateShopifyCV } = require('../job/shopifyEvaluator');
+const { evaluateLabCV } = require('../job/GCMS_labEvaluator');
 
 class CVService {
   constructor(cvRepository, socketIO, fileUploadService) {
@@ -11,12 +12,32 @@ class CVService {
 
  
 
+  determineJobCategory(jobTitle = '') {
+    const normalized = (jobTitle || '').toLowerCase();
+    if (normalized.includes('shopify')) {
+      return 'SHOPIFY';
+    }
+    if (
+      normalized.includes('gcms') ||
+      normalized.includes('gc/ms') ||
+      normalized.includes('gc ms') ||
+      normalized.includes('gc-lab') ||
+      normalized.includes('gc lab') ||
+      normalized.includes('lab specialist') ||
+      normalized.includes('gas chromatography')
+    ) {
+      return 'GCMS';
+    }
+    return 'GENERAL';
+  }
+
   async createCVFromN8N(n8nData) {
     try {
       console.log('Parsing n8n data:', JSON.stringify(n8nData, null, 2));
       
       const cvData = this.parseN8NData(n8nData);
       console.log('Parsed CV data:', cvData);
+      const jobCategory = this.determineJobCategory(cvData.jobTitle);
       
       this.validateCVData(cvData);
 
@@ -24,6 +45,7 @@ class CVService {
       let pdfBuffer = null;
       let fileInfo;
       let scoring = null;
+      let scoringRole = null;
 
       try {
         // Step 1: Extract PDF buffer - try getPdfBuffer first, then fallback to processN8NFile logic
@@ -70,10 +92,19 @@ class CVService {
 
           // Step 3: Score the CV if we have text
           if (cvText && cvText.length > 0) {
-            console.log('🎯 Evaluating CV for Shopify position...');
+            console.log(`🎯 Evaluating CV for ${jobCategory} position...`);
             try {
-              scoring = evaluateShopifyCV(cvText);
-              console.log(`✅ [Shopify Evaluation] Candidate: ${cvData.fullName || 'N/A'} | Score: ${scoring.score} | Rank: ${scoring.rank} | Experience matches: ${scoring.shopifyExperienceMatches} | Technical matches: ${scoring.technicalMatches}`);
+              if (jobCategory === 'SHOPIFY') {
+                scoring = evaluateShopifyCV(cvText);
+                scoringRole = 'SHOPIFY';
+                console.log(`✅ [Shopify Evaluation] Candidate: ${cvData.fullName || 'N/A'} | Score: ${scoring.score} | Rank: ${scoring.rank} | Experience matches: ${scoring.shopifyExperienceMatches} | Technical matches: ${scoring.technicalMatches}`);
+              } else if (jobCategory === 'GCMS') {
+                scoring = evaluateLabCV(cvText);
+                scoringRole = 'GCMS';
+                console.log(`✅ [GCMS Evaluation] Candidate: ${cvData.fullName || 'N/A'} | Score: ${scoring.score} | Rank: ${scoring.rank} | Groups hit: ${scoring.positiveGroupsHit}`);
+              } else {
+                console.log(`ℹ️ No evaluator configured for job title "${cvData.jobTitle}", skipping scoring.`);
+              }
             } catch (scoreError) {
               console.error('❌ CV scoring failed:', scoreError.message);
               console.error('Scoring error stack:', scoreError.stack);
@@ -124,18 +155,34 @@ class CVService {
         email: cvData.email,
         phoneNumber: cvData.phoneNumber || null,
         jobTitle: cvData.jobTitle,
+        jobCategory,
         file: fileInfo,
+        evaluationRole: scoringRole,
         // Include scoring data if available
         ...(scoring ? {
           score: scoring.score,
           rank: scoring.rank,
-          shopifyExperienceMatches: scoring.shopifyExperienceMatches,
-          technicalMatches: scoring.technicalMatches,
-          matchedExperience: scoring.matchedExperience,
-          matchedTechnicalSkills: scoring.matchedTechnicalSkills,
           reason: scoring.reason
         } : {})
       };
+
+      if (scoringRole === 'SHOPIFY' && scoring) {
+        Object.assign(cvRecord, {
+          shopifyExperienceMatches: scoring.shopifyExperienceMatches,
+          technicalMatches: scoring.technicalMatches,
+          matchedExperience: scoring.matchedExperience,
+          matchedTechnicalSkills: scoring.matchedTechnicalSkills
+        });
+      }
+
+      if (scoringRole === 'GCMS' && scoring) {
+        Object.assign(cvRecord, {
+          gcmsPositiveGroupsHit: scoring.positiveGroupsHit,
+          gcmsMinPositiveGroupsRequired: scoring.minPositiveGroupsRequired,
+          gcmsMatchedGroups: scoring.matchedGroups || [],
+          gcmsMatchedKeywords: scoring.matchedKeywords || {}
+        });
+      }
 
       console.log('Creating CV record with file info:', {
         fileName: fileInfo.fileName,
@@ -158,12 +205,17 @@ class CVService {
       return {
         success: true,
         message: 'CV received from n8n successfully',
+        evaluationRole: scoringRole,
+        jobCategory,
         score: scoring?.score || null,
         rank: scoring?.rank || null,
-        shopifyExperienceMatches: scoring?.shopifyExperienceMatches || null,
-        technicalMatches: scoring?.technicalMatches || null,
-        matchedExperience: scoring?.matchedExperience || [],
-        matchedTechnicalSkills: scoring?.matchedTechnicalSkills || [],
+        shopifyExperienceMatches: scoringRole === 'SHOPIFY' ? (scoring?.shopifyExperienceMatches || null) : null,
+        technicalMatches: scoringRole === 'SHOPIFY' ? (scoring?.technicalMatches || null) : null,
+        matchedExperience: scoringRole === 'SHOPIFY' ? (scoring?.matchedExperience || []) : [],
+        matchedTechnicalSkills: scoringRole === 'SHOPIFY' ? (scoring?.matchedTechnicalSkills || []) : [],
+        gcmsPositiveGroupsHit: scoringRole === 'GCMS' ? (scoring?.positiveGroupsHit || null) : null,
+        gcmsMatchedGroups: scoringRole === 'GCMS' ? (scoring?.matchedGroups || []) : [],
+        gcmsMatchedKeywords: scoringRole === 'GCMS' ? (scoring?.matchedKeywords || {}) : {},
         reason: scoring?.reason || null,
         supabaseUrl: fileInfo.supabaseUrl,
         data: createdCV
@@ -443,8 +495,45 @@ class CVService {
   async getShopifyApplicants(options = {}) {
     try {
       const baseQuery = {
+        $or: [
+          { jobCategory: 'SHOPIFY' },
+          {
+            $and: [
+              { $or: [{ jobCategory: { $exists: false } }, { jobCategory: null }] },
+              { jobTitle: { $regex: /shopify/i } }
+            ]
+          }
+        ]
+      };
+      const result = await this.cvRepository.findWithOptions(baseQuery, {
+        ...options,
+        minScore: options.minScore || 50,
+        page: options.page || 1,
+        limit: options.limit || 12
+      });
+      return {
+        success: true,
+        data: result.data,
+        pagination: result.pagination
+      };
+    } catch (error) {
+      throw new Error(`Failed to get Shopify applicants: ${error.message}`);
+    }
+  }
+
+  async getGcmsApplicants(options = {}) {
+    try {
+      const baseQuery = {
         score: { $gte: 50 },
-        jobTitle: { $eq: "Shopify" }
+        $or: [
+          { jobCategory: 'GCMS' },
+          {
+            $and: [
+              { $or: [{ jobCategory: { $exists: false } }, { jobCategory: null }] },
+              { jobTitle: { $regex: /(gc[\s-]*ms|gc\/ms|lab specialist|chromatography)/i } }
+            ]
+          }
+        ]
       };
       const result = await this.cvRepository.findWithOptions(baseQuery, {
         ...options,
@@ -551,8 +640,16 @@ class CVService {
       const monthAgo = new Date(now.setMonth(now.getMonth() - 1));
 
       const baseQuery = {
-        score: { $gte: 50 },
-        jobTitle: { $eq: "Shopify" }
+        $or: [
+          { jobCategory: 'SHOPIFY' },
+          {
+            $and: [
+              { $or: [{ jobCategory: { $exists: false } }, { jobCategory: null }] },
+              { jobTitle: { $regex: /shopify/i } }
+            ]
+          }
+        ],
+        score: { $gte: 50 }
       };
 
       const [total, todayCount, weekCount, monthCount] = await Promise.all([
@@ -573,6 +670,47 @@ class CVService {
       };
     } catch (error) {
       throw new Error(`Failed to get Shopify analytics: ${error.message}`);
+    }
+  }
+
+  async getGcmsAnalytics() {
+    try {
+      const now = new Date();
+      const today = new Date(now.setHours(0, 0, 0, 0));
+      const weekAgo = new Date(now.setDate(now.getDate() - 7));
+      const monthAgo = new Date(now.setMonth(now.getMonth() - 1));
+
+      const baseQuery = {
+        score: { $gte: 50 },
+        $or: [
+          { jobCategory: 'GCMS' },
+          {
+            $and: [
+              { $or: [{ jobCategory: { $exists: false } }, { jobCategory: null }] },
+              { jobTitle: { $regex: /(gc[\s-]*ms|gc\/ms|lab specialist|chromatography)/i } }
+            ]
+          }
+        ]
+      };
+
+      const [total, todayCount, weekCount, monthCount] = await Promise.all([
+        this.cvRepository.countWithQuery(baseQuery),
+        this.cvRepository.countWithQuery(baseQuery, today, new Date()),
+        this.cvRepository.countWithQuery(baseQuery, weekAgo, new Date()),
+        this.cvRepository.countWithQuery(baseQuery, monthAgo, new Date())
+      ]);
+
+      return {
+        success: true,
+        data: {
+          total,
+          today: todayCount,
+          week: weekCount,
+          month: monthCount
+        }
+      };
+    } catch (error) {
+      throw new Error(`Failed to get GCMS analytics: ${error.message}`);
     }
   }
 
@@ -701,6 +839,71 @@ class CVService {
       };
     } catch (error) {
       throw new Error(`Failed to delete CV: ${error.message}`);
+    }
+  }
+
+  async deleteBulk(ids = []) {
+    try {
+      if (!Array.isArray(ids) || ids.length === 0) {
+        throw new Error('No CV ids provided for bulk delete');
+      }
+
+      const cvs = await this.cvRepository.findByIds(ids);
+      if (!cvs || cvs.length === 0) {
+        throw new Error('No CVs found for provided ids');
+      }
+
+      for (const cv of cvs) {
+        if (cv.file && cv.file.supabasePath) {
+          try {
+            await this.fileUploadService.supabaseService.deleteFile(cv.file.supabasePath);
+            console.log(`Deleted file from Supabase: ${cv.file.supabasePath}`);
+          } catch (supabaseError) {
+            console.warn(`Failed to delete file from Supabase: ${supabaseError.message}`);
+          }
+        }
+      }
+
+      await this.cvRepository.deleteMany(ids);
+      return {
+        success: true,
+        message: `Deleted ${ids.length} CVs successfully`
+      };
+    } catch (error) {
+      throw new Error(`Failed to bulk delete CVs: ${error.message}`);
+    }
+  }
+
+  async deleteAllRejected() {
+    try {
+      const rejectedCvs = await this.cvRepository.findRejectedDocs();
+      if (!rejectedCvs || rejectedCvs.length === 0) {
+        return {
+          success: true,
+          message: 'No rejected CVs to delete',
+          deleted: 0
+        };
+      }
+
+      for (const cv of rejectedCvs) {
+        if (cv.file && cv.file.supabasePath) {
+          try {
+            await this.fileUploadService.supabaseService.deleteFile(cv.file.supabasePath);
+            console.log(`Deleted file from Supabase: ${cv.file.supabasePath}`);
+          } catch (supabaseError) {
+            console.warn(`Failed to delete file from Supabase: ${supabaseError.message}`);
+          }
+        }
+      }
+
+      await this.cvRepository.deleteRejected();
+      return {
+        success: true,
+        message: `Deleted ${rejectedCvs.length} rejected CVs successfully`,
+        deleted: rejectedCvs.length
+      };
+    } catch (error) {
+      throw new Error(`Failed to delete rejected CVs: ${error.message}`);
     }
   }
 }
