@@ -1,41 +1,68 @@
-/**
- * Shopify CV Scoring and Ranking System
- * Evaluates CVs based on Shopify experience and technical skills
- */
 
-// Shopify Experience Skills with keyword patterns
 const SHOPIFY_EXPERIENCE_SKILLS = {
-  shopify_store_setup: [
-    'created a shopify website',
-    'shopify store setup',
-    'shopify website setup',
-    'shopify store creation',
-    'build shopify website'
+  shopify_store_build: [
+    'shopify developer',
+    'senior shopify developer',
+    'shopify development',
+    'shopify store',
+    'shopify stores',
+    'shopify theme',
+    'shopify themes',
+    'shopify app',
+    'shopify apps',
+    'custom shopify sections',
+    'shopify sections',
+    'shopify templates',
+    'shopify checkout',
+    'custom shopify features',
+    'themes',
+    'shopify'
   ],
+
+
   shopify_management: [
     'managed shopify store',
     'shopify store management',
     'shopify store maintenance',
-    'e-commerce website management'
+    'shopify maintenance',
+    'store maintenance',
+    'store management',
+    'a/b testing',
+    'a/b experiments'
   ],
+
+
   shopify_product_listing: [
     'shopify product listing',
     'product listing',
+    'product uploads',
     'catalog optimization',
-    'product uploads'
+    'collection setup'
   ],
+
+
   shopify_seo: [
     'shopify seo',
     'seo optimization',
     'on-page seo',
-    'website optimization'
+    'website optimization',
+    'core web vitals',
+    'page speed optimization',
+    'performance optimization',
+    'performance improvements'
   ],
+
+
   shopify_analytics: [
     'performance analysis',
     'performance tracking',
     'conversion tracking',
-    'shopify analytics'
+    'conversion rate optimization',
+    'shopify analytics',
+    'google analytics'
   ],
+
+ 
   shopify_marketing: [
     'meta ads',
     'facebook ads',
@@ -45,6 +72,14 @@ const SHOPIFY_EXPERIENCE_SKILLS = {
     'conversion campaigns',
     'remarketing',
     'retargeting'
+  ],
+
+
+  shopify_migrations: [
+    'migrated stores from woocommerce to shopify',
+    'migration to shopify',
+    'migrated to shopify',
+    'shopify migration'
   ]
 };
 
@@ -54,7 +89,8 @@ const TECHNICAL_SKILLS = {
     'shopify liquid',
     'liquid templating',
     'liquid template',
-    'liquid code'
+    'liquid code',
+    'liquid'
   ],
   theme_customization: [
     'custom shopify theme',
@@ -62,7 +98,33 @@ const TECHNICAL_SKILLS = {
     'custom sections',
     'custom blocks',
     'dynamic sections',
-    'theme architecture'
+    'theme architecture',
+    'liquid inheritance',
+    'liquid macros',
+    'liquid partials',
+    'liquid sections',
+    'liquid snippets',
+    'liquid templates',
+    'liquid themes',
+    'liquid widgets',
+    'liquid components',
+    'liquid plugins',
+    'liquid extensions',
+    'liquid apps',
+    'liquid themes',
+    'liquid widgets',
+    'liquid components',
+    'liquid plugins',
+    'liquid extensions',
+    'theme development',
+    'theme design',
+    'theme implementation',
+    'theme customization',
+    'theme development',
+    'theme design',
+    'theme edit',
+    'theme editing'
+  
   ],
   os2: [
     'online store 2.0',
@@ -96,34 +158,20 @@ const TECHNICAL_SKILLS = {
   ]
 };
 
-/**
- * Normalizes text for pattern matching
- * @param {string} text - Raw text
- * @returns {string} - Normalized text
- */
+
 function normalizeText(text) {
   return text.toLowerCase().replace(/\s+/g, ' ').trim();
 }
 
-/**
- * Checks if any pattern in a skill matches the text
- * @param {string} text - Normalized text
- * @param {string[]} patterns - Array of patterns to match
- * @returns {boolean}
- */
+
 function matchesPattern(text, patterns) {
   return patterns.some(pattern => text.includes(pattern.toLowerCase()));
 }
 
-/**
- * Evaluates a CV for Shopify developer position
- * @param {string} rawText - Extracted text from PDF
- * @returns {Object} - Scoring results
- */
+
 function evaluateShopifyCV(rawText) {
   const normalizedText = normalizeText(rawText);
   
-  // Phase 1: Shopify Experience Gate
   const matchedExperience = [];
   let shopifyExperienceMatches = 0;
   
@@ -134,7 +182,6 @@ function evaluateShopifyCV(rawText) {
     }
   }
   
-  // Gate check: Need at least 2 distinct Shopify experience skills
   if (shopifyExperienceMatches < 2) {
     return {
       score: 0,
@@ -147,7 +194,6 @@ function evaluateShopifyCV(rawText) {
     };
   }
   
-  // Phase 2: Technical Shopify Skills + Ranking
   const matchedTechnicalSkills = [];
   let technicalMatches = 0;
   
@@ -157,37 +203,30 @@ function evaluateShopifyCV(rawText) {
       technicalMatches++;
     }
   }
-  
-  // Calculate score based on shopifyExperienceMatches and technical skills
+
   let finalScore = 0;
   
-  // If shopifyExperienceMatches >= 3, give base score of 50
   if (shopifyExperienceMatches >= 3) {
     const baseScore = 50;
-    // Additional points for technical skills (max 50 additional points)
     const technicalBonus = Math.min(technicalMatches * 10, 50);
     finalScore = Math.min(100, baseScore + technicalBonus);
   } else {
-    // Less than 3 shopify experience matches = rejected (score < 50)
-    // But still give some points based on technical skills
     finalScore = Math.min(49, technicalMatches * 10);
   }
-  
-  // Determine rank based on score and matches
+
   let rank;
   if (finalScore >= 85 && shopifyExperienceMatches >= 3) {
-    rank = 'S'; // Strong dev
+    rank = 'S'; 
   } else if (finalScore >= 70 && shopifyExperienceMatches >= 3) {
-    rank = 'A'; // Solid dev
+    rank = 'A'; 
   } else if (finalScore >= 55 && shopifyExperienceMatches >= 3) {
-    rank = 'B'; // Mid / okay
+    rank = 'B'; 
   } else if (finalScore >= 50 && shopifyExperienceMatches >= 3) {
-    rank = 'C'; // Minimum pass (50 points with at least 3 Shopify experience skills)
+    rank = 'C'; 
   } else {
-    rank = 'REJECT'; // Score < 50 or less than 3 Shopify experience skills
+    rank = 'REJECT'; 
   }
   
-  // Generate reason
   let reason = '';
   if (finalScore >= 50 && shopifyExperienceMatches >= 3) {
     reason = `Passed evaluation with rank ${rank}. Found ${shopifyExperienceMatches} Shopify experience skills and ${technicalMatches} technical skills.`;

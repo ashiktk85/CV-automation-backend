@@ -443,7 +443,7 @@ class CVService {
   async getShopifyApplicants(options = {}) {
     try {
       const baseQuery = {
-        score: { $ne: null },
+        score: { $gte: 50 },
         jobTitle: { $eq: "Shopify" }
       };
       const result = await this.cvRepository.findWithOptions(baseQuery, {
@@ -542,9 +542,7 @@ class CVService {
     }
   }
 
-  /**
-   * Get analytics for Shopify applicants
-   */
+
   async getShopifyAnalytics() {
     try {
       const now = new Date();
@@ -553,7 +551,7 @@ class CVService {
       const monthAgo = new Date(now.setMonth(now.getMonth() - 1));
 
       const baseQuery = {
-        score: { $ne: null },
+        score: { $gte: 50 },
         jobTitle: { $eq: "Shopify" }
       };
 
